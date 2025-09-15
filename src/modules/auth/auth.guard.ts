@@ -7,13 +7,21 @@ export class AuthGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers.authorization;
 
-    if (!authHeader) {
-      throw new UnauthorizedException('No authorization header');
+    // 쿠키에서 토큰 확인
+    let token = request.cookies?.token;
+
+    // 쿠키에 없으면 Authorization 헤더에서 확인 (하위 호환성)
+    if (!token) {
+      const authHeader = request.headers.authorization;
+      if (authHeader) {
+        token = authHeader.replace('Bearer ', '');
+      }
     }
 
-    const token = authHeader.replace('Bearer ', '');
+    if (!token) {
+      throw new UnauthorizedException('No token provided');
+    }
 
     try {
       const payload = this.authService.verifyToken(token);

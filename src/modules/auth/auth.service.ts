@@ -5,7 +5,7 @@ import { User } from '../../entities/user.entity';
 @Injectable()
 export class AuthService {
   private readonly jwtSecret = process.env.JWT_SECRET || 'fallback-secret-key';
-  private readonly tokenExpiry = '3d';
+  private readonly tokenExpiry = process.env.TOKEN_EXPIRY || '3d';
 
   generateToken(user: User): string {
     const payload = {
@@ -14,7 +14,9 @@ export class AuthService {
       purpose: user.purpose,
     };
 
-    return jwt.sign(payload, this.jwtSecret, { expiresIn: this.tokenExpiry });
+    return jwt.sign(payload, this.jwtSecret, {
+      expiresIn: this.tokenExpiry as jwt.SignOptions['expiresIn']
+    });
   }
 
   verifyToken(token: string): any {
@@ -27,10 +29,10 @@ export class AuthService {
 
   async startSession(): Promise<{ token: string; expiresAt: number }> {
     const tempUser: User = {
-      id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      language: 'ko',
+      id: `${process.env.TEMP_USER_PREFIX || 'temp_'}${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      language: process.env.DEFAULT_LANGUAGE || 'ko',
       interests: [],
-      purpose: 'tourist',
+      purpose: (process.env.DEFAULT_PURPOSE as any) || 'tourist',
       location: { latitude: 0, longitude: 0 },
       isActive: true,
       createdAt: Date.now(),
@@ -38,7 +40,8 @@ export class AuthService {
     };
 
     const token = this.generateToken(tempUser);
-    const expiresAt = Date.now() + (3 * 24 * 60 * 60 * 1000);
+    const cookieMaxAgeDays = parseInt(process.env.COOKIE_MAX_AGE_DAYS || '3');
+    const expiresAt = Date.now() + (cookieMaxAgeDays * 24 * 60 * 60 * 1000);
 
     return { token, expiresAt };
   }
