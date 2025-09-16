@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
-import { User } from '../../entities/user.entity';
+import { User, CreateUserDto } from '../../entities/user.entity';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class AuthService {
   private readonly jwtSecret = process.env.JWT_SECRET || 'fallback-secret-key';
   private readonly tokenExpiry = '3d';
+
+  constructor(private readonly userService: UserService) {}
 
   generateToken(user: User): string {
     const payload = {
@@ -25,21 +28,31 @@ export class AuthService {
     }
   }
 
+  async generateTokenForUser(userId: string): Promise<{ token: string; expiresAt: number }> {
+    const user = await this.userService.findUserById(userId);
+    const token = this.generateToken(user);
+    const expiresAt = Date.now() + (3 * 24 * 60 * 60 * 1000);
+
+    return { token, expiresAt };
+  }
+
+  async createUserAndToken(createUserDto: CreateUserDto): Promise<{ user: User; token: string; expiresAt: number }> {
+    const user = await this.userService.createUser(createUserDto);
+    const token = this.generateToken(user);
+    const expiresAt = Date.now() + (3 * 24 * 60 * 60 * 1000);
+
+    return { user, token, expiresAt };
+  }
+
   async startSession(): Promise<{ token: string; expiresAt: number }> {
-    const tempUser: User = {
-      id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    const defaultUserData: CreateUserDto = {
       language: 'ko',
       interests: [],
       purpose: 'tourist',
       location: { latitude: 0, longitude: 0 },
-      isActive: true,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
     };
 
-    const token = this.generateToken(tempUser);
-    const expiresAt = Date.now() + (3 * 24 * 60 * 60 * 1000);
-
+    const { token, expiresAt } = await this.createUserAndToken(defaultUserData);
     return { token, expiresAt };
   }
 }

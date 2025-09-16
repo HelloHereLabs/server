@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { User } from '../../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UserService {
@@ -46,6 +47,36 @@ export class UserService {
     user.location = { latitude, longitude };
     user.updatedAt = Date.now();
     return user;
+  }
+
+  async updateUser(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+    const user = await this.findUserById(id);
+
+    if (updateUserDto.language !== undefined) {
+      user.language = updateUserDto.language;
+    }
+    if (updateUserDto.interests !== undefined) {
+      user.interests = updateUserDto.interests;
+    }
+    if (updateUserDto.purpose !== undefined) {
+      user.purpose = updateUserDto.purpose;
+    }
+    if (updateUserDto.location !== undefined) {
+      user.location = updateUserDto.location;
+    }
+
+    user.updatedAt = Date.now();
+    return user;
+  }
+
+  async deleteUser(id: string): Promise<{ message: string }> {
+    const userIndex = this.users.findIndex(user => user.id === id);
+    if (userIndex === -1) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    this.users.splice(userIndex, 1);
+    return { message: `User with ID ${id} has been deleted` };
   }
 
   async deactivateUser(id: string): Promise<User> {

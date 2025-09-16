@@ -1,7 +1,8 @@
-import { Controller, Post, Get, Patch, Body, Param, Query } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from '../../entities/user.entity';
 
 @ApiTags('사용자')
@@ -15,6 +16,36 @@ export class UserController {
   @ApiResponse({ status: 201, description: '사용자 생성 성공' })
   async createUser(@Body() createUserDto: CreateUserDto): Promise<User> {
     return this.userService.createUser(createUserDto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: '사용자 정보 업데이트', description: '사용자 ID로 사용자 정보를 업데이트합니다' })
+  @ApiParam({ name: 'id', description: '사용자 ID' })
+  @ApiResponse({ status: 200, description: '사용자 정보 업데이트 성공' })
+  @ApiResponse({ status: 404, description: '사용자를 찾을 수 없음' })
+  async updateUser(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto
+  ): Promise<User> {
+    return this.userService.updateUser(id, updateUserDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '사용자 삭제', description: '사용자 ID로 사용자를 삭제합니다' })
+  @ApiParam({ name: 'id', description: '사용자 ID' })
+  @ApiResponse({
+    status: 200,
+    description: '사용자 삭제 성공',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', description: '삭제 성공 메시지' }
+      }
+    }
+  })
+  @ApiResponse({ status: 404, description: '사용자를 찾을 수 없음' })
+  async deleteUser(@Param('id') id: string): Promise<{ message: string }> {
+    return this.userService.deleteUser(id);
   }
 
   @Get(':id')
