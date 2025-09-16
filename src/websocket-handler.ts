@@ -99,9 +99,9 @@ export const websocketHandler = async (
 };
 
 async function handleConnect(connectionId: string, event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  // JWT 토큰 검증
-  const token = event.queryStringParameters?.token;
-  if (!token) {
+  // JWT 토큰 검증 (query string에서 추출 후 디코딩)
+  const rawToken = event.queryStringParameters?.token;
+  if (!rawToken) {
     console.error('No token provided');
     return {
       statusCode: 401,
@@ -109,9 +109,13 @@ async function handleConnect(connectionId: string, event: APIGatewayProxyEvent):
     };
   }
 
+  const token = decodeURIComponent(rawToken);
+  console.log('Decoded token:', token);
+  console.log('JWT_SECRET:', JWT_SECRET);
+
   const decoded = verifyJWT(token);
   if (!decoded) {
-    console.error('Invalid token');
+    console.error('Invalid token:', token.substring(0, 50) + '...');
     return {
       statusCode: 401,
       body: JSON.stringify({ message: 'Unauthorized: Invalid token' }),
