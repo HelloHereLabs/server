@@ -1,5 +1,5 @@
 export interface User {
-  id: string;
+  userId: string;
   language: string;
   interests: string[];
   purpose: 'tourist' | 'local' | 'business' | 'study';

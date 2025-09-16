@@ -12,7 +12,7 @@ export class AuthService {
 
   generateToken(user: User): string {
     const payload = {
-      userId: user.id,
+      userId: user.userId,
       language: user.language,
       purpose: user.purpose,
     };
