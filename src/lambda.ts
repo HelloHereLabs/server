@@ -3,7 +3,7 @@ import { ExpressAdapter } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { configure as serverlessExpress } from '@vendia/serverless-express';
+import { configure as serverlessExpress } from '@codegenie/serverless-express';
 import * as express from 'express';
 
 let cachedHandler: any;
