@@ -55,4 +55,17 @@ export class AuthService {
     const { token, expiresAt } = await this.createUserAndToken(defaultUserData);
     return { token, expiresAt };
   }
+
+  generateWebSocketToken(userId: string): { token: string; expiresAt: number } {
+    const payload = {
+      userId,
+      type: 'websocket',
+      iat: Math.floor(Date.now() / 1000),
+    };
+
+    const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '10m' });
+    const expiresAt = Date.now() + (10 * 60 * 1000); // 10분
+
+    return { token, expiresAt };
+  }
 }

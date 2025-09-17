@@ -1,7 +1,8 @@
-import { Controller, Post, Body, Param, Res } from '@nestjs/common';
+import { Controller, Post, Body, Param, Res, Get, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
+import { AuthGuard } from './auth.guard';
 import { CreateUserDto } from '../../entities/user.entity';
 
 @ApiTags('인증')
@@ -63,5 +64,27 @@ export class AuthController {
       user,
       expiresAt
     });
+  }
+
+  @Get('websocket-token')
+  @UseGuards(AuthGuard)
+  @ApiOperation({
+    summary: 'WebSocket 연결용 임시 토큰 발급',
+    description: '쿠키 인증 후 WebSocket 연결용 10분 유효 토큰을 발급합니다'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'WebSocket 토큰 발급 성공',
+    schema: {
+      type: 'object',
+      properties: {
+        token: { type: 'string', description: 'WebSocket용 JWT 토큰 (10분 유효)' },
+        expiresAt: { type: 'number', description: '만료 시각 (timestamp)' }
+      }
+    }
+  })
+  getWebSocketToken(@Req() req: Request) {
+    const userId = req.user?.userId;
+    return this.authService.generateWebSocketToken(userId);
   }
 }
