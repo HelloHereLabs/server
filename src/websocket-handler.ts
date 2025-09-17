@@ -162,14 +162,25 @@ async function handleSendMessage(
 ): Promise<APIGatewayProxyResult> {
   const connectionId = event.requestContext.connectionId!;
   const body = JSON.parse(event.body || '{}');
-  const { roomId, message, userId } = body;
+  const { roomId, message } = body;
 
-  if (!roomId || !message || !userId) {
+  if (!roomId || !message) {
     return {
       statusCode: 400,
       body: JSON.stringify({ message: 'Missing required fields' }),
     };
   }
+
+  // DynamoDB에서 connectionId로 저장된 userId 조회
+  const connectionData = await getConnectionData(connectionId);
+  if (!connectionData || !connectionData.userId) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ message: 'Unauthorized: Invalid connection' }),
+    };
+  }
+
+  const userId = connectionData.userId;
 
   // 메시지를 데이터베이스에 저장
   const messageData: MessageData = {
@@ -225,14 +236,25 @@ async function handleJoinRoom(
 ): Promise<APIGatewayProxyResult> {
   const connectionId = event.requestContext.connectionId!;
   const body = JSON.parse(event.body || '{}');
-  const { roomId, userId } = body;
+  const { roomId } = body;
 
-  if (!roomId || !userId) {
+  if (!roomId) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ message: 'Missing roomId or userId' }),
+      body: JSON.stringify({ message: 'Missing roomId' }),
     };
   }
+
+  // DynamoDB에서 connectionId로 저장된 userId 조회
+  const connectionData = await getConnectionData(connectionId);
+  if (!connectionData || !connectionData.userId) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ message: 'Unauthorized: Invalid connection' }),
+    };
+  }
+
+  const userId = connectionData.userId;
 
   // 연결 정보 업데이트
   await docClient.send(new PutCommand({
@@ -293,4 +315,21 @@ async function getRoomConnections(roomId: string): Promise<ConnectionData[]> {
   }));
 
   return result.Items as ConnectionData[];
+}
+
+async function getConnectionData(connectionId: string): Promise<ConnectionData | null> {
+  try {
+    const result = await docClient.send(new QueryCommand({
+      TableName: CONNECTIONS_TABLE,
+      KeyConditionExpression: 'connectionId = :connectionId',
+      ExpressionAttributeValues: {
+        ':connectionId': connectionId,
+      },
+    }));
+
+    return result.Items?.[0] as ConnectionData || null;
+  } catch (error) {
+    console.error('Error getting connection data:', error);
+    return null;
+  }
 }
