@@ -83,7 +83,7 @@ export class AuthController {
       }
     }
   })
-  getWebSocketToken(@Req() req: Request) {
+  getWebSocketToken(@Req() req: Request & { user?: { userId: string } }) {
     const userId = req.user?.userId;
     return this.authService.generateWebSocketToken(userId);
   }

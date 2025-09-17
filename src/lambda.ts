@@ -5,11 +5,16 @@ import { AppModule } from './app.module';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { configure as serverlessExpress } from '@codegenie/serverless-express';
 import * as express from 'express';
+import * as cookieParser from 'cookie-parser';
 
 let cachedHandler: any;
 
 async function createApp(): Promise<express.Application> {
   const expressApp = express();
+
+  // Cookie parser middleware 추가
+  expressApp.use(cookieParser());
+
   const adapter = new ExpressAdapter(expressApp);
 
   const app = await NestFactory.create(AppModule, adapter, {
