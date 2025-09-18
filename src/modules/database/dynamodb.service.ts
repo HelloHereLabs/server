@@ -111,4 +111,43 @@ export class DynamoDBService {
   private deg2rad(deg: number): number {
     return deg * (Math.PI/180);
   }
+
+  // WebSocket 연결 관리 메서드들
+  async saveConnection(connectionId: string, userId: string): Promise<void> {
+    const updates = {
+      activeConnectionId: connectionId,
+      connectedAt: new Date().toISOString(),
+      updatedAt: Date.now()
+    };
+    await this.update(userId, updates);
+  }
+
+  async removeConnection(connectionId: string): Promise<void> {
+    // connectionId로 사용자를 찾아서 activeConnectionId 제거
+    const users = await this.scanActiveUsers();
+    const user = users.find(u => u.activeConnectionId === connectionId);
+
+    if (user) {
+      const updates = {
+        activeConnectionId: null,
+        updatedAt: Date.now()
+      };
+      await this.update(user.userId, updates);
+    }
+  }
+
+  async getActiveConnections(): Promise<Array<{ connectionId: string; userId: string }>> {
+    const command = new ScanCommand({
+      TableName: this.tableName,
+      FilterExpression: 'attribute_exists(activeConnectionId)',
+    });
+
+    const result = await this.client.send(command);
+    return (result.Items || [])
+      .filter(item => item.activeConnectionId)
+      .map(item => ({
+        connectionId: item.activeConnectionId,
+        userId: item.userId
+      }));
+  }
 }

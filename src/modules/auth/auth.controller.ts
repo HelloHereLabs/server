@@ -54,8 +54,8 @@ export class AuthController {
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: true,  // SameSite=None에는 필수
+      sameSite: 'none',  // 프론트/백엔드 도메인이 다르면 none
       maxAge: cookieMaxAgeDays * 24 * 60 * 60 * 1000
     });
 
