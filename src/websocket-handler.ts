@@ -12,28 +12,21 @@ import {
   PostToConnectionCommand
 } from '@aws-sdk/client-apigatewaymanagementapi';
 import * as jwt from 'jsonwebtoken';
+import { getConnectionData, ConnectionData } from './utils/websocket.utils';
+import {
+  handleCreateChatRoom,
+  handleSendChatMessage,
+  handleGetChatHistory,
+  handleGetChatRooms,
+  handleLeaveChatRoom,
+  handleOpenChatRoom
+} from './handlers/chat.handlers';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
 const CONNECTIONS_TABLE = process.env.CONNECTIONS_TABLE || 'websocket-connections';
-const MESSAGES_TABLE = process.env.MESSAGES_TABLE || 'chat-messages';
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
-
-interface ConnectionData {
-  connectionId: string;
-  userId?: string;
-  roomId?: string;
-  timestamp: number;
-}
-
-interface MessageData {
-  messageId: string;
-  roomId: string;
-  userId: string;
-  message: string;
-  timestamp: number;
-}
 
 function verifyJWT(token: string): any {
   try {
@@ -69,6 +62,13 @@ export const websocketHandler = async (
     region: process.env.AWS_REGION,
   });
 
+  console.log('🔥 BEFORE SWITCH - routeKey:', routeKey);
+  console.log('🔥 IMPORTS CHECK:', {
+    handleCreateChatRoom: typeof handleCreateChatRoom,
+    docClient: typeof docClient,
+    apiGwClient: typeof apiGwClient
+  });
+
   try {
     switch (routeKey) {
       case '$connect':
@@ -77,20 +77,40 @@ export const websocketHandler = async (
       case '$disconnect':
         return await handleDisconnect(connectionId!);
 
-      case 'sendMessage':
-        return await handleSendMessage(event, apiGwClient);
+      // 채팅 관련 Route Keys
+      case 'createRoom':
+        console.log('🚨 ENTERING createRoom case');
+        return await handleCreateChatRoom(event, apiGwClient, docClient);
 
-      case 'joinRoom':
-        return await handleJoinRoom(event, apiGwClient);
+      case 'sendChatMsg':
+        console.log('🚨 ENTERING sendChatMsg case');
+        return await handleSendChatMessage(event, apiGwClient, docClient);
+
+      case 'getChatHistory':
+        console.log('🚨 ENTERING getChatHistory case');
+        return await handleGetChatHistory(event, apiGwClient, docClient);
+
+      case 'getChatRooms':
+        console.log('🚨 ENTERING getChatRooms case');
+        return await handleGetChatRooms(event, apiGwClient, docClient);
+
+      case 'leaveChatRoom':
+        console.log('🚨 ENTERING leaveChatRoom case');
+        return await handleLeaveChatRoom(event, apiGwClient, docClient);
+
+      case 'openChatRoom':
+        console.log('🚨 ENTERING openChatRoom case');
+        return await handleOpenChatRoom(event, apiGwClient, docClient);
 
       default:
+        console.log('❌ UNKNOWN ROUTE:', routeKey);
         return {
           statusCode: 400,
           body: JSON.stringify({ message: 'Unknown route' }),
         };
     }
   } catch (error) {
-    console.error('Error:', error);
+    console.error('💥 SWITCH ERROR:', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ message: 'Internal server error' }),
@@ -156,141 +176,4 @@ async function handleDisconnect(connectionId: string): Promise<APIGatewayProxyRe
   };
 }
 
-async function handleSendMessage(
-  event: APIGatewayProxyEvent,
-  apiGwClient: ApiGatewayManagementApiClient
-): Promise<APIGatewayProxyResult> {
-  const connectionId = event.requestContext.connectionId!;
-  const body = JSON.parse(event.body || '{}');
-  const { roomId, message, userId } = body;
 
-  if (!roomId || !message || !userId) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ message: 'Missing required fields' }),
-    };
-  }
-
-  // 메시지를 데이터베이스에 저장
-  const messageData: MessageData = {
-    messageId: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    roomId,
-    userId,
-    message,
-    timestamp: Date.now(),
-  };
-
-  await docClient.send(new PutCommand({
-    TableName: MESSAGES_TABLE,
-    Item: messageData,
-  }));
-
-  // 해당 룸의 모든 연결된 사용자에게 메시지 브로드캐스트
-  const connections = await getRoomConnections(roomId);
-
-  const messagePayload = {
-    type: 'message',
-    data: messageData,
-  };
-
-  const sendPromises = connections.map(async (conn) => {
-    try {
-      await apiGwClient.send(new PostToConnectionCommand({
-        ConnectionId: conn.connectionId,
-        Data: JSON.stringify(messagePayload),
-      }));
-    } catch (error) {
-      console.error(`Failed to send message to ${conn.connectionId}:`, error);
-      // 연결이 끊어진 경우 데이터베이스에서 제거
-      if ((error as any).statusCode === 410) {
-        await docClient.send(new DeleteCommand({
-          TableName: CONNECTIONS_TABLE,
-          Key: { connectionId: conn.connectionId },
-        }));
-      }
-    }
-  });
-
-  await Promise.all(sendPromises);
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ message: 'Message sent' }),
-  };
-}
-
-async function handleJoinRoom(
-  event: APIGatewayProxyEvent,
-  apiGwClient: ApiGatewayManagementApiClient
-): Promise<APIGatewayProxyResult> {
-  const connectionId = event.requestContext.connectionId!;
-  const body = JSON.parse(event.body || '{}');
-  const { roomId, userId } = body;
-
-  if (!roomId || !userId) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ message: 'Missing roomId or userId' }),
-    };
-  }
-
-  // 연결 정보 업데이트
-  await docClient.send(new PutCommand({
-    TableName: CONNECTIONS_TABLE,
-    Item: {
-      connectionId,
-      userId,
-      roomId,
-      timestamp: Date.now(),
-    },
-  }));
-
-  // 룸 참여 알림을 다른 참가자들에게 전송
-  const connections = await getRoomConnections(roomId);
-  const joinPayload = {
-    type: 'userJoined',
-    data: {
-      userId,
-      roomId,
-      timestamp: Date.now(),
-    },
-  };
-
-  const sendPromises = connections
-    .filter(conn => conn.connectionId !== connectionId)
-    .map(async (conn) => {
-      try {
-        await apiGwClient.send(new PostToConnectionCommand({
-          ConnectionId: conn.connectionId,
-          Data: JSON.stringify(joinPayload),
-        }));
-      } catch (error) {
-        console.error(`Failed to send join notification to ${conn.connectionId}:`, error);
-        if ((error as any).statusCode === 410) {
-          await docClient.send(new DeleteCommand({
-            TableName: CONNECTIONS_TABLE,
-            Key: { connectionId: conn.connectionId },
-          }));
-        }
-      }
-    });
-
-  await Promise.all(sendPromises);
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ message: 'Joined room' }),
-  };
-}
-
-async function getRoomConnections(roomId: string): Promise<ConnectionData[]> {
-  const result = await docClient.send(new ScanCommand({
-    TableName: CONNECTIONS_TABLE,
-    FilterExpression: 'roomId = :roomId',
-    ExpressionAttributeValues: {
-      ':roomId': roomId,
-    },
-  }));
-
-  return result.Items as ConnectionData[];
-}
