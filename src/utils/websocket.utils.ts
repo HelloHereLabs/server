@@ -8,6 +8,7 @@ const CHAT_ROOMS_TABLE = process.env.CHAT_ROOMS_TABLE || 'hh-chat-rooms';
 export interface ConnectionData {
   connectionId: string;
   userId?: string;
+  nickname?: string;
   chatroomId?: string;
   timestamp: number;
 }

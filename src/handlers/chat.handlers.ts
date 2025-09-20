@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { ApiGatewayManagementApiClient } from '@aws-sdk/client-apigatewaymanagementapi';
-import { DynamoDBDocumentClient, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { ChatRoom, ChatMessage } from '../types/chat.types';
 import {
@@ -141,6 +141,7 @@ export async function handleSendChatMessage(
     id: uuidv4(),
     chatroomId,
     sender,
+    senderNickname: connectionData.nickname, // JWT에서 가져온 닉네임
     message,
     timestamp: Date.now(),
     type,
@@ -253,6 +254,25 @@ export async function handleLeaveChatRoom(
     };
   }
 
+  // 채팅방 정보 가져오기
+  const room = await getChatRoom(chatroomId, docClient);
+  if (!room) {
+    await sendToConnection(connectionId, {
+      action: 'leaveRoomResponse',
+      data: { chatroomId, success: false, error: 'Room not found' }
+    }, apiGwClient, docClient);
+    return { statusCode: 404, body: JSON.stringify({ message: 'Room not found' }) };
+  }
+
+  // 권한 확인 - 참가자인지 체크
+  if (room.participants.sender !== connectionData.userId && room.participants.receiver !== connectionData.userId) {
+    await sendToConnection(connectionId, {
+      action: 'leaveRoomResponse',
+      data: { chatroomId, success: false, error: 'Not a participant' }
+    }, apiGwClient, docClient);
+    return { statusCode: 403, body: JSON.stringify({ message: 'Not a participant of this room' }) };
+  }
+
   // 연결에서 채팅방 제거
   await docClient.send(new UpdateCommand({
     TableName: CONNECTIONS_TABLE,
@@ -260,17 +280,20 @@ export async function handleLeaveChatRoom(
     UpdateExpression: 'REMOVE chatroomId'
   }));
 
-  // 상대방에게 알림
-  const room = await getChatRoom(chatroomId, docClient);
-  if (room) {
-    const otherUser = room.participants.sender === connectionData.userId ?
-      room.participants.receiver : room.participants.sender;
+  // 1:1 채팅방이므로 방 자체를 삭제
+  await docClient.send(new DeleteCommand({
+    TableName: CHAT_ROOMS_TABLE,
+    Key: { chatroomId: chatroomId }
+  }));
 
-    await broadcastToUsers([otherUser], {
-      action: 'roomLeft',
-      data: { chatroomId, userId: connectionData.userId }
-    }, apiGwClient, docClient);
-  }
+  // 상대방에게 알림
+  const otherUser = room.participants.sender === connectionData.userId ?
+    room.participants.receiver : room.participants.sender;
+
+  await broadcastToUsers([otherUser], {
+    action: 'roomLeft',
+    data: { chatroomId, userId: connectionData.userId }
+  }, apiGwClient, docClient);
 
   await sendToConnection(connectionId, {
     action: 'leaveRoomResponse',

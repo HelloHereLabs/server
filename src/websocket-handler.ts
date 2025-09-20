@@ -147,6 +147,7 @@ async function handleConnect(connectionId: string, event: APIGatewayProxyEvent):
   const connectionData: ConnectionData = {
     connectionId,
     userId: decoded.userId || decoded.id,
+    nickname: decoded.nickname,
     timestamp: Date.now(),
   };
 

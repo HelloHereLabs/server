@@ -1,8 +1,14 @@
 // 공통 타입
+interface ChatParticipant {
+  userId: string;
+  nickname?: string;
+}
+
 interface ChatRoom {
   id: string;            // 클라이언트용 ID
   chatroomId: string;    // DynamoDB 파티션 키
   participants: { sender: string; receiver: string };
+  participantInfo?: { sender: ChatParticipant; receiver: ChatParticipant }; // UI 표시용
   lastMessage?: string;
   updatedAt: string;     // 마지막 업데이트 시각 (ISO string)
   lastActivity: number;  // 마지막 활동 timestamp (ms)
@@ -15,6 +21,7 @@ interface ChatMessage {
   id: string;
   chatroomId: string;
   sender: string;
+  senderNickname?: string; // UI 표시용
   message: string;
   timestamp: number;     // 메시지 보낸 시간 (ms)
   read?: boolean;        // 읽음 여부
@@ -179,6 +186,7 @@ export type ChatWebSocketResponse =
 
 // 개별 타입들도 export
 export {
+  ChatParticipant,
   ChatRoom,
   ChatMessage,
   CreateRoomRequest,
