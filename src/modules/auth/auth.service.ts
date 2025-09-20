@@ -10,9 +10,27 @@ export class AuthService {
 
   constructor(private readonly userService: UserService) {}
 
+  private generateRandomNickname(): string {
+    const adjectives = [
+      'Happy', 'Bright', 'Clever', 'Swift', 'Gentle', 'Bold', 'Calm', 'Cheerful',
+      'Cool', 'Friendly', 'Lucky', 'Smart', 'Brave', 'Kind', 'Sunny', 'Fresh'
+    ];
+
+    const nouns = [
+      'Cat', 'Dog', 'Fox', 'Bear', 'Lion', 'Tiger', 'Rabbit', 'Panda',
+      'Traveler', 'Explorer', 'Dreamer', 'Star', 'Cloud', 'Ocean', 'Mountain', 'Rainbow'
+    ];
+
+    const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+
+    return `${randomAdjective} ${randomNoun}`;
+  }
+
   generateToken(user: User): string {
     const payload = {
       userId: user.userId,
+      nickname: user.nickname,
       language: user.language,
       purpose: user.purpose,
     };
@@ -46,6 +64,7 @@ export class AuthService {
 
   async startSession(): Promise<{ token: string; expiresAt: number }> {
     const defaultUserData: CreateUserDto = {
+      nickname: this.generateRandomNickname(),
       language: 'ko',
       interests: [],
       purpose: 'tourist',
