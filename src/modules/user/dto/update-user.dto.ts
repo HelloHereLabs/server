@@ -9,4 +9,5 @@ export interface UpdateUserDto {
   activeConnectionId?: string | null;
   connectedAt?: string;
   lastLocationUpdate?: string;
+  isActive?: boolean;
 }

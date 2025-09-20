@@ -13,7 +13,7 @@ import {
 import { DynamoDBService } from './modules/database/dynamodb.service';
 import { UserService } from './modules/user/user.service';
 import { AuthService } from './modules/auth/auth.service';
-import { UpdateUserLocation, UpdateUserLocationSuccess } from './types/websocket.types';
+import { UpdateLocationMessage, UpdateUserLocationSuccess } from './types/websocket.types';
 
 let cachedHandler: any;
 
@@ -113,7 +113,10 @@ async function handleConnect(event: APIGatewayProxyEvent): Promise<APIGatewayPro
     // 연결 정보를 DynamoDB에 저장
     await dynamoDBService.saveConnection(connectionId!, decoded.userId);
 
-    console.log(`User ${decoded.userId} connected with connection ${connectionId}`);
+    // 사용자를 온라인 상태로 설정
+    await userService.updateUser(decoded.userId, { isActive: true });
+
+    console.log(`User ${decoded.userId} connected with connection ${connectionId} and set to online`);
     return { statusCode: 200, body: 'Connected' };
   } catch (error) {
     console.error('Authentication failed:', error);
@@ -124,6 +127,15 @@ async function handleConnect(event: APIGatewayProxyEvent): Promise<APIGatewayPro
 async function handleDisconnect(connectionId: string): Promise<APIGatewayProxyResult> {
   try {
     const dynamoDBService = new DynamoDBService();
+    const userService = new UserService(dynamoDBService);
+
+    // 연결 정보 조회 후 사용자 오프라인 상태로 설정
+    const connection = await dynamoDBService.getConnectionInfo(connectionId);
+    if (connection) {
+      await userService.updateUser(connection.userId, { isActive: false });
+      console.log(`User ${connection.userId} set to offline`);
+    }
+
     // 연결 정보를 DynamoDB에서 제거
     await dynamoDBService.removeConnection(connectionId);
     console.log(`Connection ${connectionId} disconnected and removed from database`);
@@ -134,13 +146,51 @@ async function handleDisconnect(connectionId: string): Promise<APIGatewayProxyRe
 }
 
 async function handleWebSocketMessage(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  const { connectionId } = event.requestContext;
   const body = JSON.parse(event.body || '{}');
 
-  if (body.action === 'updateUserLocationSuccess') {
-    return await handleLocationUpdate(body as UpdateUserLocationSuccess);
-  }
+  try {
+    switch (body.action) {
+      case 'updateLocation':
+        return await handleNewLocationUpdate(connectionId!, body as UpdateLocationMessage);
 
-  return { statusCode: 400, body: 'Unknown action' };
+      case 'updateUserLocationSuccess':
+        return await handleLocationUpdate(body as UpdateUserLocationSuccess);
+
+      default:
+        return { statusCode: 400, body: 'Unknown action' };
+    }
+  } catch (error) {
+    console.error('WebSocket message handling error:', error);
+    return { statusCode: 500, body: 'Internal server error' };
+  }
+}
+
+async function handleNewLocationUpdate(connectionId: string, message: UpdateLocationMessage): Promise<APIGatewayProxyResult> {
+  try {
+    const dynamoDBService = new DynamoDBService();
+    const userService = new UserService(dynamoDBService);
+
+    // 연결 ID로 사용자 ID 조회
+    const connection = await dynamoDBService.getConnectionInfo(connectionId);
+    if (!connection) {
+      return { statusCode: 404, body: 'Connection not found' };
+    }
+
+    const { latitude, longitude, updatedAt } = message.data;
+    const updateTime = updatedAt || new Date().toISOString();
+
+    await userService.updateUser(connection.userId, {
+      location: { latitude, longitude },
+      lastLocationUpdate: updateTime
+    });
+
+    console.log(`Location updated for user ${connection.userId}: ${latitude}, ${longitude}`);
+    return { statusCode: 200, body: 'Location updated' };
+  } catch (error) {
+    console.error('Failed to update location:', error);
+    return { statusCode: 500, body: 'Failed to update location' };
+  }
 }
 
 async function handleLocationUpdate(message: UpdateUserLocationSuccess): Promise<APIGatewayProxyResult> {

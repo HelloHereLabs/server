@@ -122,6 +122,19 @@ export class DynamoDBService {
     await this.update(userId, updates);
   }
 
+  async getConnectionInfo(connectionId: string): Promise<{ userId: string; connectionId: string } | null> {
+    const users = await this.scanActiveUsers();
+    const user = users.find(u => u.activeConnectionId === connectionId);
+
+    if (user) {
+      return {
+        userId: user.userId,
+        connectionId: user.activeConnectionId
+      };
+    }
+    return null;
+  }
+
   async removeConnection(connectionId: string): Promise<void> {
     // connectionId로 사용자를 찾아서 activeConnectionId 제거
     const users = await this.scanActiveUsers();

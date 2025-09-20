@@ -1,10 +1,14 @@
-// 위치정보 최신화 요청 (온라인 상태 확인) / 30초 배치 (S → C)
-export interface UpdateUserLocation {
-  action: 'updateUserLocation';
-  data: {}; // 클라이언트에게 위치 정보 요청
+// 클라이언트 주도적 위치 정보 업데이트 (C → S)
+export interface UpdateLocationMessage {
+  action: 'updateLocation';
+  data: {
+    latitude: number;
+    longitude: number;
+    updatedAt?: string;
+  };
 }
 
-// 위치정보 최신화 완료 안내 (C → S)
+// 위치정보 최신화 완료 안내 (C → S) - 기존 호환성 유지
 export interface UpdateUserLocationSuccess {
   action: 'updateUserLocationSuccess';
   data: {

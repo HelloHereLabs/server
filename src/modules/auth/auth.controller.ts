@@ -51,12 +51,14 @@ export class AuthController {
     });
 
     const cookieMaxAgeDays = parseInt(process.env.COOKIE_MAX_AGE_DAYS || '3');
+    const cookieDomain = process.env.COOKIE_DOMAIN;
 
     res.cookie('token', token, {
       httpOnly: true,
       secure: true,  // SameSite=None에는 필수
       sameSite: 'none',  // 프론트/백엔드 도메인이 다르면 none
-      maxAge: cookieMaxAgeDays * 24 * 60 * 60 * 1000
+      maxAge: cookieMaxAgeDays * 24 * 60 * 60 * 1000,
+      ...(cookieDomain && { domain: cookieDomain })
     });
 
     return res.json({
