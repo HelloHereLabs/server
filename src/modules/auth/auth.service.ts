@@ -13,18 +13,19 @@ export class AuthService {
   private generateRandomNickname(): string {
     const adjectives = [
       'Happy', 'Bright', 'Clever', 'Swift', 'Gentle', 'Bold', 'Calm', 'Cheerful',
-      'Cool', 'Friendly', 'Lucky', 'Smart', 'Brave', 'Kind', 'Sunny', 'Fresh'
+      'Cool', 'Friendly', 'Lucky', 'Smart', 'Brave', 'Kind', 'Sunny'
     ];
 
-    const nouns = [
+    const animals = [
       'Cat', 'Dog', 'Fox', 'Bear', 'Lion', 'Tiger', 'Rabbit', 'Panda',
-      'Traveler', 'Explorer', 'Dreamer', 'Star', 'Cloud', 'Ocean', 'Mountain', 'Rainbow'
+      'Wolf', 'Eagle', 'Deer', 'Owl', 'Whale', 'Dolphin', 'Penguin'
     ];
 
     const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+    const randomAnimal = animals[Math.floor(Math.random() * animals.length)];
+    const randomNumber = Math.floor(Math.random() * 10) + 1; // 1~10
 
-    return `${randomAdjective} ${randomNoun}`;
+    return `${randomAdjective}${randomAnimal}${randomNumber}`;
   }
 
   generateToken(user: User): string {
