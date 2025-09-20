@@ -6,4 +6,8 @@ export interface UpdateUserDto {
     latitude: number;
     longitude: number;
   };
+  activeConnectionId?: string | null;
+  connectedAt?: string;
+  lastLocationUpdate?: string;
+  isActive?: boolean;
 }

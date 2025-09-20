@@ -8,6 +8,9 @@ export interface User {
     longitude: number;
   };
   isActive: boolean;
+  activeConnectionId?: string;
+  connectedAt?: string;
+  lastLocationUpdate?: string;
   createdAt: number;
   updatedAt: number;
 }
