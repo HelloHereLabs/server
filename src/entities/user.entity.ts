@@ -1,5 +1,6 @@
 export interface User {
   userId: string;
+  nickname?: string;
   language: string;
   interests: string[];
   purpose: 'tourist' | 'local' | 'business' | 'study';
@@ -16,6 +17,7 @@ export interface User {
 }
 
 export interface CreateUserDto {
+  nickname?: string;
   language: string;
   interests: string[];
   purpose: 'tourist' | 'local' | 'business' | 'study';
