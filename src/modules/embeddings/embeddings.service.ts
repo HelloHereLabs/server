@@ -6,8 +6,6 @@ export interface UserProfile {
   interests: Interest[];
   purpose: Purpose;
   language: Language;
-  bio?: string;
-  age?: number;
   nationality?: string;
 }
 
@@ -19,9 +17,9 @@ export interface LocationData {
 
 export interface UserEmbedding {
   userId: string;
+  nickname?: string;
   embedding: number[];
   location: LocationData;
-  profile: UserProfile;
   timestamp?: Date;
 }
 
@@ -59,7 +57,7 @@ export class EmbeddingsService {
     targetEmbedding: number[],
     candidateEmbeddings: UserEmbedding[],
     threshold = 0.7
-  ): Promise<Array<{ userId: string; similarity: number; location: LocationData }>> {
+  ): Promise<Array<{ userId: string; nickname?: string; similarity: number; location: LocationData }>> {
     const similarities = await Promise.all(
       candidateEmbeddings.map(async (candidate) => {
         const similarity = await this.calculateSimilarity(
@@ -68,6 +66,7 @@ export class EmbeddingsService {
         );
         return {
           userId: candidate.userId,
+          nickname: candidate.nickname,
           similarity,
           location: candidate.location,
         };
@@ -86,10 +85,6 @@ export class EmbeddingsService {
       parts.push(`관심사: ${profile.interests.join(', ')}`);
     }
 
-    if (profile.bio) {
-      parts.push(`소개: ${profile.bio}`);
-    }
-
     if (profile.nationality) {
       parts.push(`국적: ${profile.nationality}`);
     }
@@ -102,14 +97,12 @@ export class EmbeddingsService {
       parts.push(`목적: ${profile.purpose}`);
     }
 
-    if (profile.age) {
-      parts.push(`연령대: ${Math.floor(profile.age / 10) * 10}대`);
-    }
-
     return parts.join('. ');
   }
 
   calculateDistance(loc1: LocationData, loc2: LocationData): number {
+    console.log(`[EmbeddingsService] calculateDistance 호출:`, { loc1, loc2 });
+
     const R = 6371;
     const dLat = this.toRad(loc2.latitude - loc1.latitude);
     const dLon = this.toRad(loc2.longitude - loc1.longitude);
@@ -120,7 +113,10 @@ export class EmbeddingsService {
       Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c;
+    const distance = R * c;
+    console.log(`[EmbeddingsService] 거리 계산 결과: ${distance}km`);
+
+    return distance;
   }
 
   private toRad(degrees: number): number {

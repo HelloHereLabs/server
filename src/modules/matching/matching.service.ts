@@ -21,6 +21,7 @@ export interface MatchRequest {
 
 export interface MatchResult {
   userId: string;
+  nickname?: string;
   similarity: number;
   distance: number;
   location: LocationData;
@@ -53,6 +54,7 @@ export class MatchingService {
         const distance = this.embeddings.calculateDistance(request.location, user.location);
         return {
           userId: user.userId,
+          nickname: user.nickname,
           similarity: 0, // GPS 매칭에서는 유사도 사용 안함
           distance,
           location: user.location,
@@ -92,6 +94,7 @@ export class MatchingService {
 
         return {
           userId: user.userId,
+          nickname: user.nickname,
           similarity: user.similarity,
           distance,
           location: user.location,
@@ -127,6 +130,16 @@ export class MatchingService {
     message: string;
   }> {
     try {
+      console.log(`[MatchingService] getLocationBasedRecommendations 호출됨 - userId: ${userId} (type: ${typeof userId})`);
+
+      // userId 유효성 검사
+      if (!userId || userId.trim() === '') {
+        console.error(`[MatchingService] userId 유효성 검사 실패 - userId: ${userId}`);
+        this.logger.error('userId가 제공되지 않았습니다');
+        throw new Error('userId가 제공되지 않았습니다');
+      }
+
+      console.log(`[MatchingService] userId 유효성 검사 통과`);
       this.logger.log(`매칭 추천 시작 - userId: ${userId}`);
 
       // 1. 사용자 정보 조회 (병렬 처리)
@@ -143,13 +156,22 @@ export class MatchingService {
 
       this.logger.log(`사용자 정보 조회 완료 - userId: ${userId}`);
 
+      // 요청자 위치 체크
+      if (userLocation.latitude === 0 && userLocation.longitude === 0) {
+        console.log(`[MatchingService] 요청자가 (0, 0) 좌표에 있음. 위치 설정 필요.`);
+        return {
+          recommendedUsers: [],
+          message: '위치 정보를 설정해주세요.'
+        };
+      }
+
       // 2. 활성 사용자들 조회 (타임아웃 설정)
       let activeUsers: UserEmbedding[];
       try {
         activeUsers = await Promise.race([
           this.getActiveUsers(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('활성 사용자 조회 타임아웃')), 20000)
+            setTimeout(() => reject(new Error('활성 사용자 조회 타임아웃')), 10000)
           )
         ]);
         this.logger.log(`활성 사용자 조회 완료: ${activeUsers.length}명`);
@@ -184,6 +206,7 @@ export class MatchingService {
         // 거리 기반으로만 최고 매칭 1명 반환
         recommendations = nearbyUsers.map((user, index) => ({
           userId: user.userId,
+          nickname: user.nickname,
           similarity: 0,
           distance: this.embeddings.calculateDistance(userLocation, user.location),
           location: user.location,
@@ -208,10 +231,24 @@ export class MatchingService {
   }
 
   private filterUsersByDistance(userLocation: LocationData, users: UserEmbedding[], maxDistanceKm: number): UserEmbedding[] {
-    return users.filter(user => {
+    console.log(`[MatchingService] filterUsersByDistance 시작 - userLocation:`, userLocation, `maxDistance: ${maxDistanceKm}km`);
+    console.log(`[MatchingService] 필터링 대상 사용자 수: ${users.length}`);
+
+    const filteredUsers = users.filter(user => {
+      // (0, 0) 좌표인 사용자 제외
+      if (user.location.latitude === 0 && user.location.longitude === 0) {
+        console.log(`[MatchingService] 사용자 ${user.userId}: (0, 0) 좌표로 제외됨`);
+        return false;
+      }
+
       const distance = this.embeddings.calculateDistance(userLocation, user.location);
-      return distance <= maxDistanceKm;
+      const isWithinDistance = distance <= maxDistanceKm;
+      console.log(`[MatchingService] 사용자 ${user.userId}: 거리 ${distance.toFixed(2)}km, 범위내: ${isWithinDistance}`);
+      return isWithinDistance;
     });
+
+    console.log(`[MatchingService] 필터링 결과: ${filteredUsers.length}명`);
+    return filteredUsers;
   }
 
   private async calculateMatchingScores(
@@ -238,6 +275,7 @@ export class MatchingService {
 
       matchResults.push({
         userId: candidate.userId,
+        nickname: candidate.nickname,
         similarity,
         distance,
         location: candidate.location,
@@ -276,7 +314,7 @@ export class MatchingService {
       // 새로운 임베딩 생성 (재시도 로직 포함)
       let embedding: number[];
       let retryCount = 0;
-      const maxRetries = 3;
+      const maxRetries = 2;
 
       while (retryCount < maxRetries) {
         try {
@@ -292,8 +330,8 @@ export class MatchingService {
             return this.generateFallbackEmbedding(profile);
           }
 
-          // 재시도 전 잠시 대기
-          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          // 재시도 전 짧은 대기 (Lambda 최적화)
+          await new Promise(resolve => setTimeout(resolve, 500 * retryCount));
         }
       }
 
@@ -318,8 +356,8 @@ export class MatchingService {
     const text = `${profile.interests.join(' ')} ${profile.purpose} ${profile.language}`;
     const hash = Buffer.from(text).toString('base64');
 
-    // 1536차원 벡터 생성 (Bedrock 기본 차원)
-    const embedding = new Array(1536).fill(0);
+    // 1024차원 벡터 생성 (Titan v2 임베딩 차원)
+    const embedding = new Array(1024).fill(0);
     for (let i = 0; i < hash.length && i < embedding.length; i++) {
       embedding[i] = hash.charCodeAt(i) / 255; // 0-1 사이 값으로 정규화
     }
@@ -351,7 +389,14 @@ export class MatchingService {
   }
 
   private async getUserProfile(userId: string): Promise<UserProfile> {
+    console.log(`[MatchingService] getUserProfile 시작 - userId: ${userId}`);
     const user = await this.userService.findUserById(userId);
+    console.log(`[MatchingService] getUserProfile 완료 - user:`, {
+      userId: user.userId,
+      interests: user.interests,
+      purpose: user.purpose,
+      language: user.language
+    });
     return {
       interests: user.interests,
       purpose: user.purpose,
@@ -360,7 +405,9 @@ export class MatchingService {
   }
 
   private async getUserLocation(userId: string): Promise<LocationData> {
+    console.log(`[MatchingService] getUserLocation 시작 - userId: ${userId}`);
     const user = await this.userService.findUserById(userId);
+    console.log(`[MatchingService] getUserLocation 완료 - location:`, user.location);
     return user.location;
   }
 
@@ -378,8 +425,8 @@ export class MatchingService {
         return [];
       }
 
-      // 임베딩 생성을 병렬 처리 (최대 3개씩으로 줄여서 속도 향상)
-      const batchSize = 3;
+      // Lambda에서 효율적인 병렬 처리 (배치 크기 축소)
+      const batchSize = 2;
       const userEmbeddings: UserEmbedding[] = [];
 
       for (let i = 0; i < activeUsers.length; i += batchSize) {
@@ -399,12 +446,13 @@ export class MatchingService {
                 const embedding = await Promise.race([
                   this.getCachedEmbedding(user.userId, profile),
                   new Promise<number[]>((_, reject) =>
-                    setTimeout(() => reject(new Error('임베딩 생성 타임아웃')), 5000)
+                    setTimeout(() => reject(new Error('임베딩 생성 타임아웃')), 3000)
                   )
                 ]);
 
                 return {
                   userId: user.userId,
+                  nickname: user.nickname,
                   embedding,
                   location: user.location,
                   profile,
@@ -414,7 +462,8 @@ export class MatchingService {
                 // 기본 임베딩으로 처리 (빈 벡터)
                 return {
                   userId: user.userId,
-                  embedding: new Array(1536).fill(0), // Bedrock 기본 차원
+                  nickname: user.nickname,
+                  embedding: new Array(1024).fill(0), // Titan v2 임베딩 차원
                   location: user.location,
                   profile: {
                     interests: user.interests || [],
