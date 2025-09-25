@@ -123,3 +123,15 @@ export async function getUserChatRooms(userId: string, docClient: DynamoDBDocume
   // 최근 활동 순으로 정렬 (lastActivity 내림차순)
   return rooms.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));
 }
+
+export async function getUserNickname(userId: string, docClient: DynamoDBDocumentClient): Promise<string | null> {
+  // 사용자의 연결 정보에서 nickname을 가져옴
+  const connections = await getUserConnections(userId, docClient);
+  if (connections.length > 0 && connections[0].nickname) {
+    return connections[0].nickname;
+  }
+
+  // 연결 정보에 nickname이 없거나 연결이 없는 경우, 사용자 테이블에서 조회
+  // (여기서는 간단히 연결 정보만 사용)
+  return null;
+}

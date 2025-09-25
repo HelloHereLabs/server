@@ -9,6 +9,7 @@ interface ChatRoom {
   chatroomId: string;    // DynamoDB 파티션 키
   participants: { sender: string; receiver: string };
   participantInfo?: { sender: ChatParticipant; receiver: ChatParticipant }; // UI 표시용
+  status: 'waiting' | 'accepted' | 'rejected' | 'left'; // 채팅방 상태
   lastMessage?: string;
   updatedAt: string;     // 마지막 업데이트 시각 (ISO string)
   lastActivity: number;  // 마지막 활동 timestamp (ms)
@@ -30,7 +31,69 @@ interface ChatMessage {
 }
 
 // ===============================
-// 1️⃣ 채팅방 생성
+// 1️⃣ 채팅 요청/수락/거절 플로우
+// C -> S: 채팅 요청 보내기
+interface RequestNewChatRequest {
+  action: 'requestNewChat';
+  data: {
+    sender: string;
+    receiver: string;
+  };
+}
+
+// S -> C: 채팅 요청 수신
+interface ReceiveNewChatNotification {
+  action: 'receiveNewChat';
+  data: {
+    sender: string;
+    senderNickname: string;
+    chatRoomId: string;
+    receiver: string;
+  };
+}
+
+// C -> S: 채팅 요청 수락
+interface AcceptNewChatRequest {
+  action: 'acceptNewChat';
+  data: {
+    sender: string;
+    receiver: string;
+    chatRoomId: string;
+  };
+}
+
+// C -> S: 채팅 요청 거절
+interface RejectNewChatRequest {
+  action: 'rejectNewChat';
+  data: {
+    sender: string;
+    receiver: string;
+    chatRoomId: string;
+  };
+}
+
+// S -> C: 채팅 요청 수락됨
+interface ChatAcceptedNotification {
+  action: 'chatAccepted';
+  data: {
+    chatRoomId: string;
+    receiver: string;
+    receiverNickname: string;
+  };
+}
+
+// S -> C: 채팅 요청 거절됨
+interface ChatRejectedNotification {
+  action: 'chatRejected';
+  data: {
+    chatRoomId: string;
+    receiver: string;
+    receiverNickname: string;
+  };
+}
+
+// ===============================
+// 2️⃣ 채팅방 생성 (기존 방식 - 호환성용)
 // C -> S
 interface CreateRoomRequest {
   action: 'createRoom';
@@ -167,6 +230,9 @@ interface SuggestTopicNotification {
 
 // 유니온 타입 정의
 export type ChatWebSocketRequest =
+  | RequestNewChatRequest
+  | AcceptNewChatRequest
+  | RejectNewChatRequest
   | CreateRoomRequest
   | SendChatMsgRequest
   | GetChatHistoryRequest
@@ -175,6 +241,9 @@ export type ChatWebSocketRequest =
   | OpenChatRoomRequest;
 
 export type ChatWebSocketResponse =
+  | ReceiveNewChatNotification
+  | ChatAcceptedNotification
+  | ChatRejectedNotification
   | CreateRoomResponse
   | NewMsgNotification
   | GetChatHistoryResponse
@@ -189,6 +258,12 @@ export {
   ChatParticipant,
   ChatRoom,
   ChatMessage,
+  RequestNewChatRequest,
+  ReceiveNewChatNotification,
+  AcceptNewChatRequest,
+  RejectNewChatRequest,
+  ChatAcceptedNotification,
+  ChatRejectedNotification,
   CreateRoomRequest,
   CreateRoomResponse,
   SendChatMsgRequest,

@@ -9,7 +9,8 @@ import {
   broadcastToUsers,
   findExistingRoom,
   getChatRoom,
-  getUserChatRooms
+  getUserChatRooms,
+  getUserNickname
 } from '../utils/websocket.utils';
 
 const CHAT_ROOMS_TABLE = process.env.CHAT_ROOMS_TABLE || 'hh-chat-rooms';
@@ -65,13 +66,14 @@ export async function handleCreateChatRoom(
   }
 
   console.log('🎯 Creating new room...');
-  // 새 채팅방 생성
+  // 새 채팅방 생성 (기본값: accepted 상태로 호환성 유지)
   const roomId = uuidv4();
   console.log('🎯 Generated roomId:', roomId);
   const newRoom: ChatRoom = {
     id: roomId,
     chatroomId: roomId,    // DynamoDB 키와 동일하게
     participants: { sender, receiver },
+    status: 'accepted',    // 기존 createRoom은 바로 활성화
     updatedAt: new Date().toISOString(),
     lastActivity: Date.now()
   };
@@ -119,12 +121,19 @@ export async function handleSendChatMessage(
     };
   }
 
-  // 채팅방 존재 확인
+  // 채팅방 존재 및 상태 확인
   const room = await getChatRoom(chatroomId, docClient);
   if (!room) {
     return {
       statusCode: 404,
       body: JSON.stringify({ message: 'Chat room not found' }),
+    };
+  }
+
+  if (room.status !== 'accepted') {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ message: 'Chat room is not active. Status: ' + room.status }),
     };
   }
 
@@ -384,4 +393,224 @@ export async function handleGetChatRooms(
 
   console.log('🎯 Chat rooms list sent');
   return { statusCode: 200, body: JSON.stringify({ message: 'Chat rooms sent' }) };
+}
+
+// ===============================
+// 새로운 채팅 요청/수락/거절 핸들러들
+// ===============================
+
+export async function handleRequestNewChat(
+  event: APIGatewayProxyEvent,
+  apiGwClient: ApiGatewayManagementApiClient,
+  docClient: DynamoDBDocumentClient
+): Promise<APIGatewayProxyResult> {
+  console.log('🎯 handleRequestNewChat STARTED');
+  const connectionId = event.requestContext.connectionId!;
+  const body = JSON.parse(event.body || '{}');
+  const { sender, receiver } = body.data || {};
+
+  const connectionData = await getConnectionData(connectionId, docClient);
+  if (!connectionData || !connectionData.userId) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ message: 'Unauthorized: Invalid connection' }),
+    };
+  }
+
+  if (sender !== connectionData.userId) {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ message: 'Sender must be the authenticated user' }),
+    };
+  }
+
+  // 기존 채팅방 확인
+  const existingRoom = await findExistingRoom(sender, receiver, docClient);
+  if (existingRoom) {
+    await sendToConnection(connectionId, {
+      action: 'chatRequestSent',
+      data: {
+        chatRoomId: existingRoom.id,
+        receiver,
+        status: existingRoom.status
+      }
+    }, apiGwClient, docClient);
+
+    return { statusCode: 200, body: JSON.stringify({ message: 'Existing room found' }) };
+  }
+
+  // 새 채팅방 생성 (waiting 상태)
+  const roomId = uuidv4();
+  const newRoom: ChatRoom = {
+    id: roomId,
+    chatroomId: roomId,
+    participants: { sender, receiver },
+    status: 'waiting',
+    updatedAt: new Date().toISOString(),
+    lastActivity: Date.now()
+  };
+
+  await docClient.send(new PutCommand({
+    TableName: CHAT_ROOMS_TABLE,
+    Item: newRoom,
+  }));
+
+  // 수신자에게 채팅 요청 알림 전송
+  const senderNickname = await getUserNickname(sender, docClient);
+  await broadcastToUsers([receiver], {
+    action: 'receiveNewChat',
+    data: {
+      sender,
+      senderNickname: senderNickname || 'Unknown User',
+      chatRoomId: roomId,
+      receiver,
+    }
+  }, apiGwClient, docClient);
+
+  // 요청자에게 성공 응답
+  await sendToConnection(connectionId, {
+    action: 'chatRequestSent',
+    data: {
+      chatRoomId: roomId,
+      receiver,
+      status: 'waiting'
+    }
+  }, apiGwClient, docClient);
+
+  console.log('🎯 handleRequestNewChat COMPLETED');
+  return { statusCode: 200, body: JSON.stringify({ message: 'Chat request sent' }) };
+}
+
+export async function handleAcceptNewChat(
+  event: APIGatewayProxyEvent,
+  apiGwClient: ApiGatewayManagementApiClient,
+  docClient: DynamoDBDocumentClient
+): Promise<APIGatewayProxyResult> {
+  console.log('🎯 handleAcceptNewChat STARTED');
+  const connectionId = event.requestContext.connectionId!;
+  const body = JSON.parse(event.body || '{}');
+  const { sender, receiver, chatRoomId } = body.data || {};
+
+  const connectionData = await getConnectionData(connectionId, docClient);
+  if (!connectionData || !connectionData.userId) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ message: 'Unauthorized: Invalid connection' }),
+    };
+  }
+
+  if (receiver !== connectionData.userId) {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ message: 'Only the receiver can accept the request' }),
+    };
+  }
+
+  // 채팅방 존재 확인
+  const room = await getChatRoom(chatRoomId, docClient);
+  if (!room || room.status !== 'waiting') {
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ message: 'Chat room not found or not in waiting status' }),
+    };
+  }
+
+  // 채팅방 상태를 'accepted'로 변경
+  await docClient.send(new UpdateCommand({
+    TableName: CHAT_ROOMS_TABLE,
+    Key: { chatroomId: chatRoomId },
+    UpdateExpression: 'SET #status = :status, updatedAt = :updated',
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: {
+      ':status': 'accepted',
+      ':updated': new Date().toISOString()
+    }
+  }));
+
+  // 요청자에게 수락 알림
+  const receiverNickname = await getUserNickname(receiver, docClient);
+  await broadcastToUsers([sender], {
+    action: 'chatAccepted',
+    data: {
+      chatRoomId,
+      receiver,
+      receiverNickname: receiverNickname || 'Unknown User',
+    }
+  }, apiGwClient, docClient);
+
+  // 수락자에게 성공 응답
+  await sendToConnection(connectionId, {
+    action: 'chatAcceptSuccess',
+    data: { chatRoomId }
+  }, apiGwClient, docClient);
+
+  console.log('🎯 handleAcceptNewChat COMPLETED');
+  return { statusCode: 200, body: JSON.stringify({ message: 'Chat request accepted' }) };
+}
+
+export async function handleRejectNewChat(
+  event: APIGatewayProxyEvent,
+  apiGwClient: ApiGatewayManagementApiClient,
+  docClient: DynamoDBDocumentClient
+): Promise<APIGatewayProxyResult> {
+  console.log('🎯 handleRejectNewChat STARTED');
+  const connectionId = event.requestContext.connectionId!;
+  const body = JSON.parse(event.body || '{}');
+  const { sender, receiver, chatRoomId } = body.data || {};
+
+  const connectionData = await getConnectionData(connectionId, docClient);
+  if (!connectionData || !connectionData.userId) {
+    return {
+      statusCode: 401,
+      body: JSON.stringify({ message: 'Unauthorized: Invalid connection' }),
+    };
+  }
+
+  if (receiver !== connectionData.userId) {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ message: 'Only the receiver can reject the request' }),
+    };
+  }
+
+  // 채팅방 존재 확인
+  const room = await getChatRoom(chatRoomId, docClient);
+  if (!room || room.status !== 'waiting') {
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ message: 'Chat room not found or not in waiting status' }),
+    };
+  }
+
+  // 채팅방 상태를 'rejected'로 변경
+  await docClient.send(new UpdateCommand({
+    TableName: CHAT_ROOMS_TABLE,
+    Key: { chatroomId: chatRoomId },
+    UpdateExpression: 'SET #status = :status, updatedAt = :updated',
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: {
+      ':status': 'rejected',
+      ':updated': new Date().toISOString()
+    }
+  }));
+
+  // 요청자에게 거절 알림
+  const receiverNickname = await getUserNickname(receiver, docClient);
+  await broadcastToUsers([sender], {
+    action: 'chatRejected',
+    data: {
+      chatRoomId,
+      receiver,
+      receiverNickname: receiverNickname || 'Unknown User',
+    }
+  }, apiGwClient, docClient);
+
+  // 거절자에게 성공 응답
+  await sendToConnection(connectionId, {
+    action: 'chatRejectSuccess',
+    data: { chatRoomId }
+  }, apiGwClient, docClient);
+
+  console.log('🎯 handleRejectNewChat COMPLETED');
+  return { statusCode: 200, body: JSON.stringify({ message: 'Chat request rejected' }) };
 }

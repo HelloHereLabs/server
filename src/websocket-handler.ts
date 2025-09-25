@@ -19,7 +19,10 @@ import {
   handleGetChatHistory,
   handleGetChatRooms,
   handleLeaveChatRoom,
-  handleOpenChatRoom
+  handleOpenChatRoom,
+  handleRequestNewChat,
+  handleAcceptNewChat,
+  handleRejectNewChat
 } from './handlers/chat.handlers';
 
 const dynamoClient = new DynamoDBClient({ region: process.env.AWS_REGION });
@@ -77,7 +80,20 @@ export const websocketHandler = async (
       case '$disconnect':
         return await handleDisconnect(connectionId!);
 
-      // 채팅 관련 Route Keys
+      // 채팅 요청 관련 Route Keys
+      case 'requestNewChat':
+        console.log('🚨 ENTERING requestNewChat case');
+        return await handleRequestNewChat(event, apiGwClient, docClient);
+
+      case 'acceptNewChat':
+        console.log('🚨 ENTERING acceptNewChat case');
+        return await handleAcceptNewChat(event, apiGwClient, docClient);
+
+      case 'rejectNewChat':
+        console.log('🚨 ENTERING rejectNewChat case');
+        return await handleRejectNewChat(event, apiGwClient, docClient);
+
+      // 기존 채팅 관련 Route Keys
       case 'createRoom':
         console.log('🚨 ENTERING createRoom case');
         return await handleCreateChatRoom(event, apiGwClient, docClient);
