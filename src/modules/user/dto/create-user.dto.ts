@@ -1,27 +1,33 @@
 import { IsString, IsArray, IsIn, IsObject, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { LANGUAGES, INTERESTS, PURPOSES, Language, Interest, Purpose } from '../../../constants/app.constants';
 
 export class CreateUserDto {
-  @ApiProperty({ description: '사용자 언어', example: 'ko' })
-  @IsString()
-  language: string;
+  @ApiProperty({
+    description: '사용자 언어',
+    enum: LANGUAGES,
+    example: 'Korean'
+  })
+  @IsIn(LANGUAGES)
+  language: Language;
 
-  @ApiProperty({ 
-    description: '관심사 목록', 
-    example: ['음식', '문화', '여행'],
+  @ApiProperty({
+    description: '관심사 목록',
+    enum: INTERESTS,
+    example: ['K-FOOD', 'HISTORY', 'LANGUAGE'],
     type: [String]
   })
   @IsArray()
-  @IsString({ each: true })
-  interests: string[];
+  @IsIn(INTERESTS, { each: true })
+  interests: Interest[];
 
-  @ApiProperty({ 
-    description: '목적', 
-    enum: ['tourist', 'local', 'business', 'study'],
-    example: 'tourist'
+  @ApiProperty({
+    description: '목적',
+    enum: PURPOSES,
+    example: 'Language Exchange'
   })
-  @IsIn(['tourist', 'local', 'business', 'study'])
-  purpose: 'tourist' | 'local' | 'business' | 'study';
+  @IsIn(PURPOSES)
+  purpose: Purpose;
 
   @ApiProperty({
     description: '위치 정보',

@@ -44,9 +44,10 @@ export class AuthController {
   })
   async startSession(@Res() res: Response) {
     const { user, token, expiresAt } = await this.authService.createUserAndToken({
-      language: 'ko',
+      nickname: this.authService.generateRandomNickname(),
+      language: 'Korean',
       interests: [],
-      purpose: 'tourist',
+      purpose: 'Travel Companion',
       location: { latitude: 0, longitude: 0 },
     });
 
@@ -71,8 +72,8 @@ export class AuthController {
   @Get('websocket-token')
   @UseGuards(AuthGuard)
   @ApiOperation({
-    summary: 'WebSocket 연결용 임시 토큰 발급',
-    description: '쿠키 인증 후 WebSocket 연결용 10분 유효 토큰을 발급합니다'
+    summary: 'WebSocket 연결용 토큰 발급',
+    description: '쿠키 인증 후 WebSocket 연결용 3일 유효 토큰을 발급합니다'
   })
   @ApiResponse({
     status: 200,
@@ -80,13 +81,13 @@ export class AuthController {
     schema: {
       type: 'object',
       properties: {
-        token: { type: 'string', description: 'WebSocket용 JWT 토큰 (10분 유효)' },
+        token: { type: 'string', description: 'WebSocket용 JWT 토큰 (3일 유효)' },
         expiresAt: { type: 'number', description: '만료 시각 (timestamp)' }
       }
     }
   })
-  getWebSocketToken(@Req() req: Request & { user?: { userId: string } }) {
+  async getWebSocketToken(@Req() req: Request & { user?: { userId: string } }) {
     const userId = req.user?.userId;
-    return this.authService.generateWebSocketToken(userId);
+    return await this.authService.generateWebSocketToken(userId);
   }
 }

@@ -10,15 +10,17 @@ export class AuthService {
 
   constructor(private readonly userService: UserService) {}
 
-  private generateRandomNickname(): string {
+  generateRandomNickname(): string {
     const adjectives = [
       'Happy', 'Bright', 'Clever', 'Swift', 'Gentle', 'Bold', 'Calm', 'Cheerful',
-      'Cool', 'Friendly', 'Lucky', 'Smart', 'Brave', 'Kind', 'Sunny'
+      'Cool', 'Friendly', 'Lucky', 'Smart', 'Brave', 'Kind', 'Sunny', 'Funny',
+      'Strong', 'Quick', 'Quiet', 'Loud', 'Wild', 'Cute', 'Fierce', 'Wise'
     ];
 
     const animals = [
       'Cat', 'Dog', 'Fox', 'Bear', 'Lion', 'Tiger', 'Rabbit', 'Panda',
-      'Wolf', 'Eagle', 'Deer', 'Owl', 'Whale', 'Dolphin', 'Penguin'
+      'Wolf', 'Eagle', 'Deer', 'Owl', 'Whale', 'Dolphin', 'Penguin', 'Shark',
+      'Horse', 'Mouse', 'Bird', 'Fish', 'Snake', 'Frog', 'Turtle', 'Monkey', 'Elephant'
     ];
 
     const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
@@ -66,9 +68,9 @@ export class AuthService {
   async startSession(): Promise<{ token: string; expiresAt: number }> {
     const defaultUserData: CreateUserDto = {
       nickname: this.generateRandomNickname(),
-      language: 'ko',
+      language: 'Korean',
       interests: [],
-      purpose: 'tourist',
+      purpose: 'Travel Companion',
       location: { latitude: 0, longitude: 0 },
     };
 
@@ -76,15 +78,19 @@ export class AuthService {
     return { token, expiresAt };
   }
 
-  generateWebSocketToken(userId: string): { token: string; expiresAt: number } {
+  async generateWebSocketToken(userId: string): Promise<{ token: string; expiresAt: number }> {
+    const user = await this.userService.findUserById(userId);
     const payload = {
-      userId,
+      userId: user.userId,
+      nickname: user.nickname,
+      language: user.language,
+      purpose: user.purpose,
       type: 'websocket',
       iat: Math.floor(Date.now() / 1000),
     };
 
-    const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '10m' });
-    const expiresAt = Date.now() + (10 * 60 * 1000); // 10분
+    const token = jwt.sign(payload, this.jwtSecret, { expiresIn: '3d' });
+    const expiresAt = Date.now() + (3 * 24 * 60 * 60 * 1000); // 3일
 
     return { token, expiresAt };
   }

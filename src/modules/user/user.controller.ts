@@ -4,6 +4,7 @@ import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from '../../entities/user.entity';
+import { LANGUAGES, INTERESTS, PURPOSES } from '../../constants/app.constants';
 
 @ApiTags('사용자')
 @ApiBearerAuth('access-token')
@@ -89,4 +90,5 @@ export class UserController {
   async deactivateUser(@Param('id') id: string): Promise<User> {
     return this.userService.deactivateUser(id);
   }
+
 }

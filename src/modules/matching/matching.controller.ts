@@ -24,19 +24,12 @@ export class MatchingController {
   }
 
   @Post('recommendations')
-  @ApiOperation({ summary: '추천 사용자 목록' })
+  @ApiOperation({ summary: '위치 기반 사용자 매칭 및 추천' })
+  @ApiResponse({ status: 200, description: '위치·관심사·목적 기반 매칭된 사용자 정보 반환' })
   async getRecommendations(@Body() request: {
-    profile: UserProfile;
-    location: LocationData;
-    allUsers: UserEmbedding[];
-    limit?: number;
+    userId: string;
   }) {
-    return this.matchingService.getRecommendedUsers(
-      request.profile,
-      request.location,
-      request.allUsers,
-      request.limit
-    );
+    return this.matchingService.getLocationBasedRecommendations(request.userId);
   }
 
 }

@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BedrockService } from '../bedrock/bedrock.service';
+import { Language, Interest, Purpose } from '../../constants/app.constants';
 
 export interface UserProfile {
-  interests: string[];
+  interests: Interest[];
+  purpose: Purpose;
+  language: Language;
   bio?: string;
   age?: number;
   nationality?: string;
-  languages?: string[];
 }
 
 export interface LocationData {
@@ -17,9 +19,10 @@ export interface LocationData {
 
 export interface UserEmbedding {
   userId: string;
-  profileEmbedding: number[];
+  embedding: number[];
   location: LocationData;
-  timestamp: Date;
+  profile: UserProfile;
+  timestamp?: Date;
 }
 
 @Injectable()
@@ -61,7 +64,7 @@ export class EmbeddingsService {
       candidateEmbeddings.map(async (candidate) => {
         const similarity = await this.calculateSimilarity(
           targetEmbedding,
-          candidate.profileEmbedding
+          candidate.embedding
         );
         return {
           userId: candidate.userId,
@@ -91,8 +94,12 @@ export class EmbeddingsService {
       parts.push(`국적: ${profile.nationality}`);
     }
 
-    if (profile.languages?.length) {
-      parts.push(`언어: ${profile.languages.join(', ')}`);
+    if (profile.language) {
+      parts.push(`언어: ${profile.language}`);
+    }
+
+    if (profile.purpose) {
+      parts.push(`목적: ${profile.purpose}`);
     }
 
     if (profile.age) {

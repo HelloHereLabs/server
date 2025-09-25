@@ -1,9 +1,11 @@
+import { Language, Interest, Purpose } from '../constants/app.constants';
+
 export interface User {
   userId: string;
   nickname?: string;
-  language: string;
-  interests: string[];
-  purpose: 'tourist' | 'local' | 'business' | 'study';
+  language: Language;
+  interests: Interest[];
+  purpose: Purpose;
   location: {
     latitude: number;
     longitude: number;
@@ -18,9 +20,9 @@ export interface User {
 
 export interface CreateUserDto {
   nickname?: string;
-  language: string;
-  interests: string[];
-  purpose: 'tourist' | 'local' | 'business' | 'study';
+  language: Language;
+  interests: Interest[];
+  purpose: Purpose;
   location: {
     latitude: number;
     longitude: number;
