@@ -1,21 +1,28 @@
+import { Language, Interest, Purpose } from '../constants/app.constants';
+
 export interface User {
-  id: string;
-  language: string;
-  interests: string[];
-  purpose: 'tourist' | 'local' | 'business' | 'study';
+  userId: string;
+  nickname?: string;
+  language: Language;
+  interests: Interest[];
+  purpose: Purpose;
   location: {
     latitude: number;
     longitude: number;
   };
   isActive: boolean;
+  activeConnectionId?: string;
+  connectedAt?: string;
+  lastLocationUpdate?: string;
   createdAt: number;
   updatedAt: number;
 }
 
 export interface CreateUserDto {
-  language: string;
-  interests: string[];
-  purpose: 'tourist' | 'local' | 'business' | 'study';
+  nickname?: string;
+  language: Language;
+  interests: Interest[];
+  purpose: Purpose;
   location: {
     latitude: number;
     longitude: number;

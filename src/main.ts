@@ -4,7 +4,9 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'error', 'warn']
+  });
   
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
@@ -12,23 +14,28 @@ async function bootstrap() {
     transform: true,
   }));
 
+  // 환경변수에서 CORS origins 읽기
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',')
+    : ['https://develop.d39gx5kr6gfiso.amplifyapp.com'];
+
   app.enableCors({
-    origin: true,
+    origin: corsOrigins,
     credentials: true,
   });
 
   // Swagger 설정
   const config = new DocumentBuilder()
-    .setTitle('외국인-시민 매칭 서비스')
-    .setDescription('외국인과 시민 간의 매칭 및 대화 지원 API')
-    .setVersion('1.0')
+    .setTitle(process.env.APP_TITLE || '외국인-시민 매칭 서비스')
+    .setDescription(process.env.APP_DESCRIPTION || '외국인과 시민 간의 매칭 및 대화 지원 API')
+    .setVersion(process.env.APP_VERSION || '1.0')
     .addBearerAuth(
       {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT',
         name: 'JWT',
-        description: '3일 유효기간 토큰을 입력하세요',
+        description: `${process.env.TOKEN_EXPIRY || '3d'} 유효기간 토큰을 입력하세요`,
         in: 'header',
       },
       'access-token',

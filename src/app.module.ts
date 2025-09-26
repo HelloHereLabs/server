@@ -4,9 +4,14 @@ import { ThrottlerModule } from '@nestjs/throttler';
 
 import { UserModule } from './modules/user/user.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { ChatModule } from './modules/chat/chat.module';
-import { LogModule } from './modules/log/log.module';
+import { DatabaseModule } from './modules/database/database.module';
+import { BedrockModule } from './modules/bedrock/bedrock.module';
+import { EmbeddingsModule } from './modules/embeddings/embeddings.module';
+import { MatchingModule } from './modules/matching/matching.module';
+import { TranslationModule } from './modules/translation/translation.module';
+import { ChatAssistModule } from './modules/chat-assist/chat-assist.module';
 import { SafetyFilterModule } from './modules/safety-filter/safety-filter.module';
+import { LogModule } from './modules/log/log.module';
 
 @Module({
   imports: [
@@ -15,13 +20,18 @@ import { SafetyFilterModule } from './modules/safety-filter/safety-filter.module
     }),
     ThrottlerModule.forRoot([{
       ttl: 60000,
-      limit: 10,
+      limit: 30,
     }]),
+    DatabaseModule,
     AuthModule,
     UserModule,
-    ChatModule,
-    LogModule,
+    BedrockModule,
+    EmbeddingsModule,
+    MatchingModule,
+    TranslationModule,
+    ChatAssistModule,
     SafetyFilterModule,
+    LogModule,
   ],
 })
 export class AppModule {}
