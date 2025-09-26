@@ -102,9 +102,13 @@ export async function handleSendChatMessage(
   apiGwClient: ApiGatewayManagementApiClient,
   docClient: DynamoDBDocumentClient
 ): Promise<APIGatewayProxyResult> {
+  console.log('🎯 handleSendChatMessage STARTED');
   const connectionId = event.requestContext.connectionId!;
+  console.log('🎯 connectionId:', connectionId);
   const body = JSON.parse(event.body || '{}');
+  console.log('🎯 parsed body:', body);
   const { sender, chatroomId, message, type = 'text', attachments = [] } = body.data || {};
+  console.log('🎯 extracted data:', { sender, chatroomId, message, type, attachments });
 
   const connectionData = await getConnectionData(connectionId, docClient);
   if (!connectionData || !connectionData.userId) {
@@ -122,8 +126,11 @@ export async function handleSendChatMessage(
   }
 
   // 채팅방 존재 및 상태 확인
+  console.log('🎯 Getting chat room:', chatroomId);
   const room = await getChatRoom(chatroomId, docClient);
+  console.log('🎯 Retrieved room:', room);
   if (!room) {
+    console.log('🎯 Room not found');
     return {
       statusCode: 404,
       body: JSON.stringify({ message: 'Chat room not found' }),
@@ -146,6 +153,7 @@ export async function handleSendChatMessage(
   }
 
   // 메시지 저장
+  console.log('🎯 Creating chat message object...');
   const chatMessage: ChatMessage = {
     id: uuidv4(),
     chatroomId,
@@ -157,30 +165,55 @@ export async function handleSendChatMessage(
     attachments,
     read: false
   };
+  console.log('🎯 Chat message object created:', chatMessage);
 
-  await docClient.send(new PutCommand({
-    TableName: CHAT_MESSAGES_TABLE,
-    Item: chatMessage,
-  }));
+  console.log('🎯 Saving message to DynamoDB...');
+  console.log('🎯 CHAT_MESSAGES_TABLE:', CHAT_MESSAGES_TABLE);
+  try {
+    await docClient.send(new PutCommand({
+      TableName: CHAT_MESSAGES_TABLE,
+      Item: chatMessage,
+    }));
+    console.log('🎯 ✅ Message saved successfully');
+  } catch (error) {
+    console.error('🎯 ❌ Error saving message:', error);
+    throw error;
+  }
 
   // 채팅방 정보 업데이트
-  await docClient.send(new UpdateCommand({
-    TableName: CHAT_ROOMS_TABLE,
-    Key: { chatroomId: chatroomId },
-    UpdateExpression: 'SET lastMessage = :msg, lastActivity = :activity, updatedAt = :updated',
-    ExpressionAttributeValues: {
-      ':msg': message,
-      ':activity': Date.now(),
-      ':updated': new Date().toISOString()
-    }
-  }));
+  console.log('🎯 Updating chat room info...');
+  try {
+    await docClient.send(new UpdateCommand({
+      TableName: CHAT_ROOMS_TABLE,
+      Key: { chatroomId: chatroomId },
+      UpdateExpression: 'SET lastMessage = :msg, lastActivity = :activity, updatedAt = :updated',
+      ExpressionAttributeValues: {
+        ':msg': message,
+        ':activity': Date.now(),
+        ':updated': new Date().toISOString()
+      }
+    }));
+    console.log('🎯 ✅ Chat room updated successfully');
+  } catch (error) {
+    console.error('🎯 ❌ Error updating chat room:', error);
+    throw error;
+  }
 
   // 참가자들에게 메시지 전송
   const participants = [room.participants.sender, room.participants.receiver];
-  await broadcastToUsers(participants, {
-    action: 'newMsg',
-    data: { chatroomId, message: chatMessage }
-  }, apiGwClient, docClient);
+  console.log('🎯 Broadcasting to participants:', participants);
+  console.log('🎯 Message data:', { chatroomId, message: chatMessage });
+
+  try {
+    await broadcastToUsers(participants, {
+      action: 'newMsg',
+      data: { chatroomId, message: chatMessage }
+    }, apiGwClient, docClient);
+    console.log('🎯 ✅ Broadcast completed successfully');
+  } catch (error) {
+    console.error('🎯 ❌ Error broadcasting message:', error);
+    throw error;
+  }
 
   return { statusCode: 200, body: JSON.stringify({ message: 'Message sent' }) };
 }
@@ -417,25 +450,9 @@ export async function handleRequestNewChat(
     };
   }
 
-  if (sender !== connectionData.userId) {
-    return {
-      statusCode: 403,
-      body: JSON.stringify({ message: 'Sender must be the authenticated user' }),
-    };
-  }
-
   // 기존 채팅방 확인
   const existingRoom = await findExistingRoom(sender, receiver, docClient);
   if (existingRoom) {
-    await sendToConnection(connectionId, {
-      action: 'chatRequestSent',
-      data: {
-        chatRoomId: existingRoom.id,
-        receiver,
-        status: existingRoom.status
-      }
-    }, apiGwClient, docClient);
-
     return { statusCode: 200, body: JSON.stringify({ message: 'Existing room found' }) };
   }
 
@@ -467,14 +484,10 @@ export async function handleRequestNewChat(
     }
   }, apiGwClient, docClient);
 
-  // 요청자에게 성공 응답
-  await sendToConnection(connectionId, {
-    action: 'chatRequestSent',
-    data: {
-      chatRoomId: roomId,
-      receiver,
-      status: 'waiting'
-    }
+  // 요청자에게 채팅방 생성 완료 알림 전송
+  await broadcastToUsers([sender], {
+    action: 'roomCreated',
+    data: newRoom
   }, apiGwClient, docClient);
 
   console.log('🎯 handleRequestNewChat COMPLETED');
@@ -527,8 +540,10 @@ export async function handleAcceptNewChat(
     }
   }));
 
-  // 요청자에게 수락 알림
+  // 요청자에게 수락 알림 및 전체 채팅방 정보
   const receiverNickname = await getUserNickname(receiver, docClient);
+  const updatedRoom = await getChatRoom(chatRoomId, docClient);
+
   await broadcastToUsers([sender], {
     action: 'chatAccepted',
     data: {
@@ -538,10 +553,22 @@ export async function handleAcceptNewChat(
     }
   }, apiGwClient, docClient);
 
+  // 요청자에게 전체 채팅방 정보도 전송
+  await broadcastToUsers([sender], {
+    action: 'roomCreated',
+    data: updatedRoom
+  }, apiGwClient, docClient);
+
   // 수락자에게 성공 응답
   await sendToConnection(connectionId, {
     action: 'chatAcceptSuccess',
     data: { chatRoomId }
+  }, apiGwClient, docClient);
+
+  // 수락자에게 전체 채팅방 정보도 전송
+  await sendToConnection(connectionId, {
+    action: 'roomCreated',
+    data: updatedRoom
   }, apiGwClient, docClient);
 
   console.log('🎯 handleAcceptNewChat COMPLETED');
