@@ -2,9 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import * as path from 'path';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'error', 'warn'],
+  });
   
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
@@ -12,10 +15,29 @@ async function bootstrap() {
     transform: true,
   }));
 
+  // CORS 설정 - 환경변수에서 허용된 오리진 목록 읽기
+  const allowedOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      // WebSocket이나 Postman 등에서는 origin이 undefined일 수 있음
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.warn(`CORS blocked origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'), false);
+      }
+    },
     credentials: true,
   });
+
+  // 정적 파일 서빙 설정 (Express 기반)
+  const express = require('express');
+  app.use(express.static(path.join(__dirname, '..')));
 
   // Swagger 설정
   const config = new DocumentBuilder()
