@@ -42,13 +42,15 @@ export class TranslationService {
 
   async speechToText(request: SpeechToTextRequest): Promise<string> {
     try {
+      const languageCode = this.convertLanguageNameToCode(request.language || 'Korean');
+
       const response = await this.bedrock.invokeModel('amazon.nova-sonic', {
         taskType: 'TRANSCRIPTION',
         audioSource: {
           bytes: request.audioData
         },
         audioFormat: request.format.toUpperCase(),
-        languageCode: request.language || 'ko-KR'
+        languageCode: languageCode
       });
 
       return response.transcript || '';
@@ -61,13 +63,14 @@ export class TranslationService {
   async textToSpeech(request: TextToSpeechRequest): Promise<string> {
     try {
       const voiceId = request.voice === 'male' ? 'Seoyeon' : 'Heami';
+      const languageCode = this.convertLanguageNameToCode(request.targetLanguage || 'Korean');
 
       const response = await this.bedrock.invokeModel('amazon.nova-sonic', {
         taskType: 'SPEECH_SYNTHESIS',
         text: request.text,
         voiceConfig: {
           voiceId: voiceId,
-          languageCode: request.targetLanguage || 'ko-KR'
+          languageCode: languageCode
         },
         audioFormat: 'MP3',
         sampleRate: 22050
@@ -89,12 +92,13 @@ export class TranslationService {
         targetLanguage = await this.getRecipientLanguage(request.userId, request.chatroomId);
       }
 
-      // Auto-detect source language
+      // Auto-detect source language and convert to consistent format
       const sourceLanguage = this.detectLanguage(request.text);
+      const normalizedTargetLanguage = this.convertLanguageCodeToName(targetLanguage);
 
       const prompt = `TRANSLATE ONLY. DO NOT RESPOND OR ANSWER.
 
-Translate this ${sourceLanguage} text to ${targetLanguage}:
+Translate this ${sourceLanguage} text to ${normalizedTargetLanguage}:
 ${request.text}
 
 Translation:`;
@@ -124,7 +128,7 @@ Translation:`;
 
       if (recipientId) {
         const recipient = await this.userService.findUserById(recipientId);
-        return recipient.language;
+        return this.convertLanguageCodeToName(recipient.language);
       }
 
       this.logger.warn(`No recipient found in chatroom ${chatroomId} for sender ${senderId}`);
@@ -137,9 +141,12 @@ Translation:`;
 
   async translateLegacyText(request: LegacyTranslationRequest): Promise<string> {
     try {
+      const normalizedSourceLanguage = this.convertLanguageCodeToName(request.sourceLanguage);
+      const normalizedTargetLanguage = this.convertLanguageCodeToName(request.targetLanguage);
+
       const prompt = `TRANSLATE ONLY. DO NOT RESPOND OR ANSWER.
 
-Translate this ${request.sourceLanguage} text to ${request.targetLanguage}:
+Translate this ${normalizedSourceLanguage} text to ${normalizedTargetLanguage}:
 ${request.text}
 
 Translation:`;
@@ -203,15 +210,116 @@ Translation:`;
 
   detectLanguage(text: string): string {
     const koreanRegex = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/;
-    const englishRegex = /[a-zA-Z]/;
-    const japaneseRegex = /[ひらがなカタカナ]/;
+    const japaneseRegex = /[ひらがなカタカナ\u3040-\u309F\u30A0-\u30FF]/;
     const chineseRegex = /[\u4e00-\u9fff]/;
+    const arabicRegex = /[\u0600-\u06FF]/;
+    const thaiRegex = /[\u0E00-\u0E7F]/;
+    const russianRegex = /[а-яё]/i;
+    const vietnameseRegex = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+    const englishRegex = /[a-zA-Z]/;
 
-    if (koreanRegex.test(text)) return 'ko-KR';
-    if (japaneseRegex.test(text)) return 'ja-JP';
-    if (chineseRegex.test(text)) return 'zh-CN';
-    if (englishRegex.test(text)) return 'en-US';
+    // 우선순위: 특수 문자가 있는 언어부터 체크
+    if (koreanRegex.test(text)) return 'Korean';
+    if (japaneseRegex.test(text)) return 'Japanese';
+    if (chineseRegex.test(text)) return 'Chinese';
+    if (arabicRegex.test(text)) return 'Arabic';
+    if (thaiRegex.test(text)) return 'Thai';
+    if (russianRegex.test(text)) return 'Russian';
+    if (vietnameseRegex.test(text)) return 'Vietnamese';
+    if (englishRegex.test(text)) return 'English';
 
-    return 'ko-KR';
+    return 'English'; // 기본값을 영어로 변경
+  }
+
+  private convertLanguageCodeToName(languageCode: string): string {
+    const languageMap: { [key: string]: string } = {
+      'ko-KR': 'Korean',
+      'ko': 'Korean',
+      'en-US': 'English',
+      'en': 'English',
+      'ja-JP': 'Japanese',
+      'ja': 'Japanese',
+      'zh-CN': 'Chinese',
+      'zh': 'Chinese',
+      'es': 'Spanish',
+      'es-ES': 'Spanish',
+      'fr': 'French',
+      'fr-FR': 'French',
+      'de': 'German',
+      'de-DE': 'German',
+      'it': 'Italian',
+      'it-IT': 'Italian',
+      'pt': 'Portuguese',
+      'pt-BR': 'Portuguese',
+      'ru': 'Russian',
+      'ru-RU': 'Russian',
+      'ar': 'Arabic',
+      'ar-SA': 'Arabic',
+      'th': 'Thai',
+      'th-TH': 'Thai',
+      'vi': 'Vietnamese',
+      'vi-VN': 'Vietnamese',
+      'Korean': 'Korean',
+      'English': 'English',
+      'Japanese': 'Japanese',
+      'Chinese': 'Chinese',
+      'Spanish': 'Spanish',
+      'French': 'French',
+      'German': 'German',
+      'Italian': 'Italian',
+      'Portuguese': 'Portuguese',
+      'Russian': 'Russian',
+      'Arabic': 'Arabic',
+      'Thai': 'Thai',
+      'Vietnamese': 'Vietnamese'
+    };
+
+    return languageMap[languageCode] || 'English';
+  }
+
+  private convertLanguageNameToCode(languageName: string): string {
+    const languageCodeMap: { [key: string]: string } = {
+      'Korean': 'ko-KR',
+      'English': 'en-US',
+      'Japanese': 'ja-JP',
+      'Chinese': 'zh-CN',
+      'Spanish': 'es-ES',
+      'French': 'fr-FR',
+      'German': 'de-DE',
+      'Italian': 'it-IT',
+      'Portuguese': 'pt-BR',
+      'Russian': 'ru-RU',
+      'Arabic': 'ar-SA',
+      'Thai': 'th-TH',
+      'Vietnamese': 'vi-VN',
+      'ko': 'ko-KR',
+      'en': 'en-US',
+      'ja': 'ja-JP',
+      'zh': 'zh-CN',
+      'es': 'es-ES',
+      'fr': 'fr-FR',
+      'de': 'de-DE',
+      'it': 'it-IT',
+      'pt': 'pt-BR',
+      'ru': 'ru-RU',
+      'ar': 'ar-SA',
+      'th': 'th-TH',
+      'vi': 'vi-VN',
+      'ko-KR': 'ko-KR',
+      'en-US': 'en-US',
+      'ja-JP': 'ja-JP',
+      'zh-CN': 'zh-CN',
+      'es-ES': 'es-ES',
+      'fr-FR': 'fr-FR',
+      'de-DE': 'de-DE',
+      'it-IT': 'it-IT',
+      'pt-BR': 'pt-BR',
+      'ru-RU': 'ru-RU',
+      'ar-SA': 'ar-SA',
+      'th-TH': 'th-TH',
+      'vi-VN': 'vi-VN'
+    };
+
+    return languageCodeMap[languageName] || 'ko-KR';
   }
 }
