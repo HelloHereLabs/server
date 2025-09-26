@@ -32,7 +32,7 @@ export interface MatchResult {
 export class MatchingService {
   private readonly logger = new Logger(MatchingService.name);
   private readonly embeddingCache = new Map<string, EmbeddingCache>();
-  private readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24시간
+  private readonly CACHE_TTL = (parseInt(process.env.EMBEDDING_CACHE_TTL_HOURS) || 24) * 60 * 60 * 1000;
 
   constructor(
     private readonly bedrock: BedrockService,
@@ -356,8 +356,9 @@ export class MatchingService {
     const text = `${profile.interests.join(' ')} ${profile.purpose} ${profile.language}`;
     const hash = Buffer.from(text).toString('base64');
 
-    // 1024차원 벡터 생성 (Titan v2 임베딩 차원)
-    const embedding = new Array(1024).fill(0);
+    // 환경변수에서 임베딩 차원 가져오기
+    const dimensions = parseInt(process.env.EMBEDDING_DIMENSIONS) || 1024;
+    const embedding = new Array(dimensions).fill(0);
     for (let i = 0; i < hash.length && i < embedding.length; i++) {
       embedding[i] = hash.charCodeAt(i) / 255; // 0-1 사이 값으로 정규화
     }
