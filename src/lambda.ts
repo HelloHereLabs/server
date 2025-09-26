@@ -26,7 +26,7 @@ async function createApp(): Promise<express.Application> {
   const adapter = new ExpressAdapter(expressApp);
 
   const app = await NestFactory.create(AppModule, adapter, {
-    logger: ['error', 'warn'],
+    logger: ['log','error', 'warn'],
     abortOnError: false,
   });
 
@@ -39,11 +39,13 @@ async function createApp(): Promise<express.Application> {
   // 환경변수에서 CORS origins 읽기
   const corsOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
-    : ['http://localhost:3000'];
+    : ['https://develop.d39gx5kr6gfiso.amplifyapp.com'];
 
   app.enableCors({
     origin: corsOrigins,
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Amz-Date', 'X-Api-Key', 'X-Amz-Security-Token'],
+    methods: ['DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT'],
   });
 
   // API Gateway에서 /test/api 접두사 추가를 위해 global prefix 설정
@@ -56,7 +58,10 @@ async function createApp(): Promise<express.Application> {
 async function bootstrap() {
   if (!cachedHandler) {
     const expressApp = await createApp();
-    cachedHandler = serverlessExpress({ app: expressApp });
+    cachedHandler = serverlessExpress({
+      app: expressApp,
+      resolutionMode: 'PROMISE',
+    });
   }
   return cachedHandler;
 }

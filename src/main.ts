@@ -4,7 +4,9 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'error', 'warn']
+  });
   
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
@@ -15,7 +17,7 @@ async function bootstrap() {
   // 환경변수에서 CORS origins 읽기
   const corsOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
-    : ['http://localhost:3000'];
+    : ['https://develop.d39gx5kr6gfiso.amplifyapp.com'];
 
   app.enableCors({
     origin: corsOrigins,
