@@ -39,8 +39,12 @@ export class BedrockService {
   private client: BedrockRuntimeClient;
 
   constructor() {
+    if (!process.env.AWS_REGION) {
+      throw new Error('AWS_REGION environment variable is required');
+    }
+
     this.client = new BedrockRuntimeClient({
-      region: 'us-east-1', // Bedrock은 항상 us-east-1 사용
+      region: process.env.AWS_REGION,
     });
   }
 
@@ -70,8 +74,12 @@ export class BedrockService {
       normalize: true,
     };
 
+    if (!process.env.BEDROCK_EMBEDDING_MODEL) {
+      throw new Error('BEDROCK_EMBEDDING_MODEL environment variable is required');
+    }
+
     const response = await this.invokeModel(
-      'amazon.titan-embed-text-v2:0',
+      process.env.BEDROCK_EMBEDDING_MODEL,
       body
     );
 
@@ -89,7 +97,7 @@ export class BedrockService {
     };
 
     const response = await this.invokeModel(
-      'amazon.titan-text-express-v1',
+      process.env.BEDROCK_TEXT_MODEL,
       body
     );
 
@@ -113,7 +121,7 @@ export class BedrockService {
     }
 
     const response = await this.invokeModel(
-      'arn:aws:bedrock:us-east-1:327784329358:inference-profile/us.anthropic.claude-3-5-sonnet-20240620-v1:0',
+      process.env.BEDROCK_CLAUDE_MODEL,
       body
     );
 
@@ -135,7 +143,7 @@ export class BedrockService {
     };
 
     const response = await this.invokeModel(
-      'amazon.titan-text-express-v1',
+      process.env.BEDROCK_TEXT_MODEL,
       body
     );
 
@@ -168,7 +176,7 @@ export class BedrockService {
   async converseWithModel(
     messages: Array<{ role: 'user' | 'assistant'; content: string }>,
     systemPrompt?: string,
-    modelId = 'amazon.nova-lite-v1:0'
+    modelId = process.env.BEDROCK_NOVA_LITE_MODEL
   ): Promise<string> {
     try {
       // Converse API는 표준 AWS SDK만 사용 (Bearer Token 사용 안 함)
@@ -198,7 +206,7 @@ export class BedrockService {
     messages: Array<{ role: 'user' | 'assistant'; content: string }>,
     tools: any[],
     systemPrompt?: string,
-    modelId = 'amazon.nova-lite-v1:0'
+    modelId = process.env.BEDROCK_NOVA_LITE_MODEL
   ): Promise<any> {
     try {
       const converseRequest = {
