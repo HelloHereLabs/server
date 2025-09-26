@@ -67,41 +67,6 @@ async translateWithContext(text: string, userContext: UserContext) {
 - 실시간 스트리밍 번역 지원
 
 
-추후 구현할 부분
-### 🎮 **커뮤니티 퀘스트 및 로컬 가이드 모드**
-게임화 요소를 통해 지속적인 참여 동기를 제공하고 깊이 있는 문화 교류를 촉진합니다.
-
-**퀘스트 시스템 구현:**
-```typescript
-// 미션 기반 매칭 및 보상 시스템
-interface CommunityQuest {
-  id: string;
-  title: string; // "외국인과 함께 전통시장 탐방"
-  description: string;
-  location: GeoLocation;
-  participants: User[];
-  rewards: {
-    badge: string;
-    points: number;
-    culturalInsights: string[];
-  };
-}
-
-// 로컬 가이드 모드
-@Post('activate-guide-mode')
-async activateGuideMode(@CurrentUser() user: User, @Body() guideData: GuideActivationDto) {
-  const guideProfile = await this.createGuideProfile(user, guideData);
-  await this.matchingService.prioritizeAsGuide(guideProfile);
-  return { status: 'active', expectedMatches: await this.predictMatchCount(guideProfile) };
-}
-```
-
-**보상 시스템:**
-- 문화 교류 뱃지 시스템
-- 포인트 기반 레벨링
-- 지역별 가이드 랭킹
-- 특별 이벤트 참여 권한
-
 ### 🛡️ **AI 사용자 안전 모니터링**
 실시간 AI 기반 안전 시스템으로 모든 교류를 보호합니다.
 
@@ -138,6 +103,41 @@ async detectRiskyBehavior(userId: string) {
 - 실시간 AI 기반 유해 콘텐츠 탐지
 - 긴급 신고 원터치 기능
 - 자동 위험 사용자 차단 시스템
+
+### **추후 구현할 부분**
+🎮 **커뮤니티 퀘스트 및 로컬 가이드 모드**
+게임화 요소를 통해 지속적인 참여 동기를 제공하고 깊이 있는 문화 교류를 촉진합니다.
+
+**퀘스트 시스템 구현:**
+```typescript
+// 미션 기반 매칭 및 보상 시스템
+interface CommunityQuest {
+  id: string;
+  title: string; // "외국인과 함께 전통시장 탐방"
+  description: string;
+  location: GeoLocation;
+  participants: User[];
+  rewards: {
+    badge: string;
+    points: number;
+    culturalInsights: string[];
+  };
+}
+
+// 로컬 가이드 모드
+@Post('activate-guide-mode')
+async activateGuideMode(@CurrentUser() user: User, @Body() guideData: GuideActivationDto) {
+  const guideProfile = await this.createGuideProfile(user, guideData);
+  await this.matchingService.prioritizeAsGuide(guideProfile);
+  return { status: 'active', expectedMatches: await this.predictMatchCount(guideProfile) };
+}
+```
+
+**보상 시스템:**
+- 문화 교류 뱃지 시스템
+- 포인트 기반 레벨링
+- 지역별 가이드 랭킹
+- 특별 이벤트 참여 권한
 
 ## 🔄 서비스 이용 플로우
 
