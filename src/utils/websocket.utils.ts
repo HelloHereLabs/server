@@ -37,13 +37,19 @@ export async function sendToConnection(
   docClient: DynamoDBDocumentClient
 ): Promise<void> {
   try {
+    console.log('🎯 [sendToConnection] Sending to:', connectionId);
+    console.log('🎯 [sendToConnection] Data:', JSON.stringify(data));
+
     await apiGwClient.send(new PostToConnectionCommand({
       ConnectionId: connectionId,
       Data: JSON.stringify(data),
     }));
+
+    console.log('🎯 [sendToConnection] Successfully sent to:', connectionId);
   } catch (error) {
-    console.error(`Failed to send to ${connectionId}:`, error);
+    console.error(`❌ Failed to send to ${connectionId}:`, error);
     if ((error as any).statusCode === 410) {
+      console.log('🎯 [sendToConnection] Connection stale, removing:', connectionId);
       await docClient.send(new DeleteCommand({
         TableName: CONNECTIONS_TABLE,
         Key: { connectionId },
@@ -58,12 +64,21 @@ export async function broadcastToUsers(
   apiGwClient: ApiGatewayManagementApiClient,
   docClient: DynamoDBDocumentClient
 ): Promise<void> {
+  console.log('🎯 [broadcastToUsers] Broadcasting to userIds:', userIds);
+  console.log('🎯 [broadcastToUsers] Data to broadcast:', JSON.stringify(data));
+
   for (const userId of userIds) {
+    console.log('🎯 [broadcastToUsers] Getting connections for userId:', userId);
     const connections = await getUserConnections(userId, docClient);
+    console.log('🎯 [broadcastToUsers] Found connections:', connections.length);
+
     for (const conn of connections) {
+      console.log('🎯 [broadcastToUsers] Sending to connectionId:', conn.connectionId);
       await sendToConnection(conn.connectionId, data, apiGwClient, docClient);
+      console.log('🎯 [broadcastToUsers] Send completed for:', conn.connectionId);
     }
   }
+  console.log('🎯 [broadcastToUsers] All broadcasts completed');
 }
 
 export async function getUserConnections(userId: string, docClient: DynamoDBDocumentClient): Promise<ConnectionData[]> {
