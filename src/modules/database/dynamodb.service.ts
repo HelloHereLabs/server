@@ -13,6 +13,7 @@ import {
 export class DynamoDBService {
   private readonly client: DynamoDBDocumentClient;
   private readonly tableName = process.env.DYNAMODB_TABLE_NAME || 'hellohere-users';
+  private readonly chatRoomTableName = process.env.CHATROOM_TABLE_NAME || 'hh-chat-rooms';
 
   constructor() {
     const dynamoClient = new DynamoDBClient({
@@ -162,5 +163,25 @@ export class DynamoDBService {
         connectionId: item.activeConnectionId,
         userId: item.userId
       }));
+  }
+
+  async getChatRoomParticipants(chatroomId: string): Promise<string[]> {
+    const command = new GetCommand({
+      TableName: this.chatRoomTableName,
+      Key: { chatroomId }
+    });
+
+    const result = await this.client.send(command);
+    return result.Item?.participants || [];
+  }
+
+  async getChatRoomInfo(chatroomId: string): Promise<any> {
+    const command = new GetCommand({
+      TableName: this.chatRoomTableName,
+      Key: { chatroomId }
+    });
+
+    const result = await this.client.send(command);
+    return result.Item || null;
   }
 }
